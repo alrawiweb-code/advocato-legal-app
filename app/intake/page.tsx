@@ -360,7 +360,7 @@ export default function IntakePage() {
                         : "bg-surface text-primary hover:border-slate/40 border-hairline hover:bg-surface-container-low"
                     }`}
                   >
-                    <span>{topic.label}</span>
+                    <span>{topic.title}</span>
                     {caseTitle === topic.title && <CheckCircle2 className="w-3.5 h-3.5 text-brass" />}
                   </button>
                 ))}

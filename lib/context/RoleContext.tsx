@@ -379,6 +379,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         stateBar: data.stateBar,
         primaryPractice: data.primaryPractice,
         hourlyRate: data.hourlyRate,
+        yearsExperience: 10,
         bio: data.bio,
       });
 

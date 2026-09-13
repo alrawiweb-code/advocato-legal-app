@@ -169,15 +169,15 @@ export function registerNewLawyer(data: {
   email: string;
   barNumber: string;
   stateBar: string;
-  yearsExperience: string | number;
+  yearsExperience?: string | number;
   primaryPractice: string;
   hourlyRate: number | string;
   bio: string;
 }): Lawyer {
   const id = `lawyer-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const years = typeof data.yearsExperience === "string" 
-    ? parseInt(data.yearsExperience.replace(/\D/g, ""), 10) || 5 
-    : data.yearsExperience;
+    ? parseInt(data.yearsExperience.replace(/\D/g, ""), 10) || 10 
+    : (data.yearsExperience || 10);
   const rate = typeof data.hourlyRate === "string" 
     ? parseFloat(data.hourlyRate.replace(/[^0-9.]/g, "")) || 2500 
     : data.hourlyRate;
