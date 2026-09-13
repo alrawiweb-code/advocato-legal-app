@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-fraunces: 'Fraunces', serif;
+    --font-inter: 'Inter', sans-serif;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    background-color: #FAF9F6;
+    color: #0B132B;
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.011em;
+  }
+
+  body {
+    overflow-x: clip;
+    width: 100%;
+    min-height: 100%;
+    -webkit-tap-highlight-color: transparent;
+    background-color: #FAF9F6;
+    color: #0B132B;
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.011em;
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Precision Swiss Hairlines */
+.border-hairline {
+  border-color: #E5E2DA;
+}
+
+/* Custom Editorial Select Dropdown (Removes ugly Windows OS default gray arrow) */
+.editorial-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='%230B132B'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='m19.5 8.25-7.5 7.5-7.5-7.5' /%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.85rem;
+  padding-right: 2.25rem;
+}
+
+/* Architectural Card Shadows */
+.shadow-dossier {
+  box-shadow: 0 1px 3px rgba(11, 19, 43, 0.04), 0 6px 16px rgba(11, 19, 43, 0.03);
+}
+
+.shadow-dossier-hover {
+  box-shadow: 0 2px 6px rgba(11, 19, 43, 0.06), 0 12px 28px rgba(11, 19, 43, 0.05);
+}
+
+@layer components {
+  /* Luxury Micro-Animations & Button States */
+  .btn-editorial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-editorial:hover {
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 14px rgba(11, 19, 43, 0.14);
+  }
+
+  .btn-editorial:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 1px 3px rgba(11, 19, 43, 0.08);
+  }
+
+  .btn-editorial-brass {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-editorial-brass:hover {
+    transform: translateY(-1.5px);
+    box-shadow: 0 4px 18px rgba(184, 134, 40, 0.28);
+  }
+
+  .btn-editorial-brass:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 1px 4px rgba(184, 134, 40, 0.15);
+  }
+
+  .btn-editorial-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-editorial-secondary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(11, 19, 43, 0.06);
+  }
+
+  .btn-editorial-secondary:active {
+    transform: translateY(0) scale(0.98);
+  }
+}
+
+

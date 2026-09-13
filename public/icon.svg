@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#000A24"/>
+  <!-- Elegant Stylized Gavel / Pillar in Muted Brass -->
+  <path d="M256 100L350 200H162L256 100Z" fill="#C99B4A"/>
+  <rect x="242" y="200" width="28" height="180" rx="6" fill="#C99B4A"/>
+  <rect x="180" y="380" width="152" height="24" rx="8" fill="#C99B4A"/>
+  <circle cx="256" cy="150" r="12" fill="#000A24"/>
+</svg>
