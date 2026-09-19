@@ -31,7 +31,16 @@ export async function updateSession(request: NextRequest) {
   });
 
   // Refresh auth token
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Protect /lawyers and its subroutes (Marketplace Phase 2 constraint)
+  if (request.nextUrl.pathname.startsWith("/lawyers")) {
+    if (!user) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
 
   return supabaseResponse;
 }

@@ -371,56 +371,94 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     password?: string;
   }) => {
     try {
-      // Register in lawyer directory
-      const newLawyer = registerNewLawyer({
-        fullName: data.name,
-        email: data.email,
-        barNumber: data.barNumber,
-        stateBar: data.stateBar,
-        primaryPractice: data.primaryPractice,
-        hourlyRate: data.hourlyRate,
-        yearsExperience: 10,
-        bio: data.bio,
-      });
-
       if (isSupabaseConnected && data.password) {
         const supabase = createClient();
-        await supabase.auth.signUp({
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
           email: data.email,
           password: data.password,
           options: {
             data: {
               full_name: data.name,
               role: "lawyer",
-              lawyer_id: newLawyer.id,
               bar_number: data.barNumber,
               jurisdiction: data.stateBar,
             },
           },
         });
+        
+        if (authError) throw authError;
+        
+        const userId = authData.user?.id;
+        if (!userId) throw new Error("User creation failed");
+        
+        // Attempt to insert into lawyer_profiles (requires RLS policy to allow insert if auth.uid() == id)
+        await supabase.from("lawyer_profiles").insert({
+          id: userId,
+          title: "Advocate",
+          headline: "New Lawyer",
+          bio: data.bio,
+          hourly_rate: Number(data.hourlyRate),
+          is_verified: false,
+          verification_status: "PENDING",
+          jurisdiction: data.stateBar,
+          practice_areas: [data.primaryPractice],
+        });
+
+        const lawyerUser: UserPersona = {
+          id: userId,
+          name: data.name,
+          email: data.email,
+          role: "lawyer",
+          avatar: DEMO_LAWYER_SARAH.avatar,
+          lawyerId: userId,
+          barNumber: data.barNumber,
+          jurisdiction: data.stateBar,
+        };
+
+        setSessionUser(lawyerUser);
+        setActiveLawyerIdState(userId);
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(lawyerUser));
+          localStorage.setItem(ACTIVE_LAWYER_KEY, userId);
+        }
+        return { success: true };
+      } else {
+        // Fallback to local mock data mutation
+        const newLawyer = registerNewLawyer({
+          fullName: data.name,
+          email: data.email,
+          barNumber: data.barNumber,
+          stateBar: data.stateBar,
+          primaryPractice: data.primaryPractice,
+          hourlyRate: data.hourlyRate,
+          yearsExperience: 10,
+          bio: data.bio,
+        });
+
+        const lawyerUser: UserPersona = {
+          id: newLawyer.id,
+          name: newLawyer.name,
+          email: data.email,
+          role: "lawyer",
+          avatar: newLawyer.avatar,
+          lawyerId: newLawyer.id,
+          barNumber: data.barNumber,
+          jurisdiction: data.stateBar,
+        };
+
+        setSessionUser(lawyerUser);
+        setActiveLawyerIdState(newLawyer.id);
+        setMyLawyerProfileState(newLawyer);
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(lawyerUser));
+          localStorage.setItem(ACTIVE_LAWYER_KEY, newLawyer.id);
+          localStorage.setItem(MY_LAWYER_PROFILE_KEY, JSON.stringify(newLawyer));
+        }
+        return { success: true };
       }
-
-      const lawyerUser: UserPersona = {
-        id: newLawyer.id,
-        name: newLawyer.name,
-        email: data.email,
-        role: "lawyer",
-        avatar: newLawyer.avatar,
-        lawyerId: newLawyer.id,
-        barNumber: data.barNumber,
-        jurisdiction: data.stateBar,
-      };
-
-      setSessionUser(lawyerUser);
-      setActiveLawyerIdState(newLawyer.id);
-      setMyLawyerProfileState(newLawyer);
-
-      if (typeof window !== "undefined") {
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(lawyerUser));
-        localStorage.setItem(ACTIVE_LAWYER_KEY, newLawyer.id);
-        localStorage.setItem(MY_LAWYER_PROFILE_KEY, JSON.stringify(newLawyer));
-      }
-      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || "Lawyer registration failed" };
     }

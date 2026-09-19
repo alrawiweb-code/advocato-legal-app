@@ -9,21 +9,23 @@ import {
   ArrowLeft,
   ArrowRight,
   Gavel,
-  Award,
   ShieldCheck,
-  Mail,
-  Phone,
   FileText,
   Share2,
   Edit3,
   Scale,
   Clock,
   X,
+  MapPin,
+  Globe,
+  Briefcase
 } from "lucide-react";
-import { getLawyerById } from "@/lib/data/lawyers";
+
 import { getOrCreateConsultationForLawyer } from "@/lib/data/consultations";
-import { Lawyer, IntakeAssessment } from "@/types";
+import { Lawyer, IntakeAssessment, LawyerReview } from "@/types";
 import { useUserRole } from "@/lib/context/RoleContext";
+import StarRating from "@/components/marketplace/StarRating";
+import ReviewsList from "@/components/marketplace/ReviewsList";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -33,7 +35,11 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const router = useRouter();
   const { role, activeLawyer, setMyLawyerProfile, currentUser } = useUserRole();
+  
   const [lawyer, setLawyer] = useState<Lawyer | null | undefined>(undefined);
+  const [reviews, setReviews] = useState<LawyerReview[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [intakeData, setIntakeData] = useState<IntakeAssessment | null>(null);
 
   // Booking Modal State
@@ -49,20 +55,55 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     hourlyRate: 2500,
     jurisdiction: "",
     bio: "",
+    headline: "",
   });
 
   useEffect(() => {
-    const found = getLawyerById(resolvedParams.id);
-    setLawyer(found || null);
-    if (found) {
-      setEditForm({
-        name: found.name,
-        title: found.title,
-        hourlyRate: found.hourlyRate,
-        jurisdiction: found.jurisdiction,
-        bio: found.bio,
-      });
-    }
+    const fetchLawyer = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/lawyers/${resolvedParams.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setLawyer(data);
+          setEditForm({
+            name: data.name,
+            title: data.title,
+            hourlyRate: data.hourlyRate,
+            jurisdiction: data.jurisdiction,
+            bio: data.bio,
+            headline: data.headline || "",
+          });
+        } else if (res.status === 401) {
+          router.push(`/login?redirect=/lawyers/${resolvedParams.id}`);
+        } else {
+          setLawyer(null);
+        }
+      } catch (e) {
+        console.error("Failed to load lawyer", e);
+        setLawyer(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const fetchReviews = async () => {
+      setReviewsLoading(true);
+      try {
+        const res = await fetch(`/api/lawyers/${resolvedParams.id}/reviews`);
+        if (res.ok) {
+          const data = await res.json();
+          setReviews(data.reviews || []);
+        }
+      } catch (e) {
+        console.error("Failed to load reviews", e);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    fetchLawyer();
+    fetchReviews();
 
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("advocato_latest_intake");
@@ -72,7 +113,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
         } catch (e) {}
       }
     }
-  }, [resolvedParams.id]);
+  }, [resolvedParams.id, router]);
 
   const isOwnProfile = role === "lawyer" && (activeLawyer?.id === lawyer?.id || !activeLawyer);
 
@@ -84,7 +125,11 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   };
 
   const handleOpenBooking = () => {
-    setShowBookingModal(true);
+    if (role === "client") {
+      setShowBookingModal(true);
+    } else {
+      alert("Only clients can book consultations.");
+    }
   };
 
   const confirmBooking = () => {
@@ -104,277 +149,332 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     router.push(`/messages?id=${consultation.id}`);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!lawyer) return;
-
-    const updatedLawyer: Lawyer = {
-      ...lawyer,
-      name: editForm.name,
-      title: editForm.title,
-      hourlyRate: Number(editForm.hourlyRate),
-      jurisdiction: editForm.jurisdiction,
-      bio: editForm.bio,
-    };
-
-    setLawyer(updatedLawyer);
-    setMyLawyerProfile(updatedLawyer);
-    setShowEditModal(false);
+  const handleSaveProfile = () => {
+    if (lawyer) {
+      const updatedLawyer = {
+        ...lawyer,
+        ...editForm,
+      };
+      setLawyer(updatedLawyer);
+      setMyLawyerProfile(updatedLawyer);
+      setShowEditModal(false);
+    }
   };
 
-  if (lawyer === undefined) {
+  if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-        <div className="text-xs text-on-surface-variant animate-pulse">Loading profile...</div>
+      <div className="flex-1 flex flex-col bg-background pt-8 pb-32">
+        <div className="max-w-[960px] w-full mx-auto px-4 md:px-8">
+          <div className="animate-pulse space-y-8">
+            <div className="h-40 bg-surface-container rounded-2xl"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                <div className="h-32 bg-surface-container rounded-2xl"></div>
+                <div className="h-48 bg-surface-container rounded-2xl"></div>
+              </div>
+              <div className="h-64 bg-surface-container rounded-2xl"></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (lawyer === null) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[60vh] max-w-md mx-auto">
-        <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-brass mb-3">
-          <Scale className="w-6 h-6" />
+      <div className="flex-1 flex flex-col items-center justify-center bg-background py-20 px-4">
+        <div className="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center mb-6">
+          <Scale className="w-8 h-8 text-outline" />
         </div>
-        <h1 className="font-headline text-xl font-semibold text-primary mb-1">Attorney Profile Not Found</h1>
-        <p className="text-xs text-on-surface-variant mb-6">
-          The lawyer profile you are looking for may have been updated or removed.
+        <h1 className="text-2xl font-headline font-semibold text-primary mb-2">Lawyer Not Found</h1>
+        <p className="text-on-surface-variant mb-6 text-center max-w-md">
+          The lawyer profile you are looking for does not exist or has been removed from the platform.
         </p>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/lawyers"
-            className="bg-primary hover:bg-slate-dark text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition-colors shadow-xs"
-          >
-            Browse Directory
-          </Link>
-          <Link
-            href="/lawyer/register"
-            className="border border-hairline hover:bg-surface-container text-primary text-xs font-semibold px-5 py-2.5 rounded-lg transition-colors"
-          >
-            Join as a Lawyer
-          </Link>
-        </div>
+        <Link href="/lawyers" className="btn-editorial bg-primary text-white px-6 py-3 rounded-lg">
+          Back to Directory
+        </Link>
       </div>
     );
   }
 
+  if (!lawyer) return null;
+
+  const matchInfo = intakeData?.matchedLawyers?.find(m => m.lawyerId === lawyer.id);
+
   return (
-    <div className="flex-1 flex flex-col bg-background pb-24 md:pb-16">
-      {/* Top Back Navigation Bar */}
-      <div className="bg-surface/80 backdrop-blur-md border-b border-hairline py-3 px-4 sm:px-6 md:px-8 sticky top-16 z-20">
-        <div className="max-w-[1240px] mx-auto flex items-center justify-between">
-          <Link
-            href={role === "lawyer" ? "/" : "/lawyers"}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-on-surface-variant hover:text-primary transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{role === "lawyer" ? "Back to Dashboard" : "Back to Lawyers"}</span>
-          </Link>
-
-          <div className="flex items-center gap-3">
-            {isOwnProfile && (
-              <button
-                type="button"
-                onClick={() => setShowEditModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brass text-white text-xs font-semibold hover:bg-brass-hover transition-colors shadow-xs"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Edit My Profile</span>
-              </button>
-            )}
-            <span className="text-xs text-on-surface-variant uppercase tracking-wider font-semibold">
-              {isOwnProfile ? "My Public Listing" : "Attorney Profile"}
-            </span>
-          </div>
+    <div className="flex-1 flex flex-col bg-background">
+      
+      {/* Top Banner indicating match */}
+      {matchInfo && (
+        <div className="bg-brass text-white px-4 py-3 text-center text-sm font-medium flex items-center justify-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-amber-200" />
+          <span>This lawyer is a <strong>{matchInfo.matchScore}% match</strong> for your case: {intakeData?.caseTitle}</span>
         </div>
-      </div>
+      )}
 
-      <div className="max-w-[1240px] w-full mx-auto px-4 sm:px-6 md:px-8 pt-6 flex flex-col gap-8">
-        {/* Editorial Profile Header Card */}
-        <div className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl border border-hairline shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border border-hairline shadow-sm shrink-0">
-              <img src={lawyer.avatar} alt={lawyer.name} className="w-full h-full object-cover" />
-            </div>
+      {/* Main Content Area */}
+      <div className="max-w-[1100px] w-full mx-auto px-4 sm:px-6 md:px-8 pt-6 pb-32">
+        
+        {/* Back Link */}
+        <Link href="/lawyers" className="inline-flex items-center gap-1.5 text-sm font-medium text-outline-variant hover:text-primary transition-colors mb-6">
+          <ArrowLeft className="w-4 h-4" />
+          Back to Directory
+        </Link>
 
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="font-headline text-2xl sm:text-3xl md:text-4xl text-primary font-semibold tracking-tight">
-                  {lawyer.name}
-                </h1>
+        {/* Profile Header Card */}
+        <div className="bg-surface-lowest rounded-2xl shadow-editorial border border-hairline overflow-hidden mb-8">
+          <div className="h-32 sm:h-40 bg-gradient-to-r from-primary to-slate relative">
+             <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+          </div>
+          <div className="px-6 sm:px-10 pb-8 relative">
+            <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start">
+              
+              {/* Avatar */}
+              <div className="relative -mt-16 sm:-mt-20 shrink-0">
+                <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-surface-lowest bg-surface-container-low overflow-hidden shadow-sm">
+                  <img src={lawyer.avatar} alt={lawyer.name} className="w-full h-full object-cover" />
+                </div>
                 {lawyer.isVerified && (
-                  <div className="flex items-center gap-1.5 bg-surface-container-low rounded-md px-3 py-1 border border-hairline">
-                    <Check className="w-3.5 h-3.5 text-brass stroke-[2.5]" />
-                    <span className="text-xs font-semibold text-primary uppercase tracking-wider">Verified Lawyer</span>
+                  <div className="absolute bottom-2 right-2 bg-white rounded-full p-0.5 shadow-sm">
+                    <ShieldCheck className="w-8 h-8 text-brass" />
                   </div>
                 )}
               </div>
-              <p className="text-sm sm:text-base text-on-surface-variant font-medium">{lawyer.title}</p>
-              <div className="flex items-center gap-3 text-xs text-on-surface-variant pt-1 flex-wrap">
-                <span className="flex items-center gap-1.5 text-slate font-semibold">
-                  <ShieldCheck className="w-4 h-4 text-brass" />
-                  <span>Licensed in {lawyer.jurisdiction}</span>
-                </span>
-                <span>•</span>
-                <span>{lawyer.yearsExperience}+ Years Experience</span>
-                <span>•</span>
-                <span className="text-emerald-700 font-medium">In Good Standing with State Bar</span>
+
+              {/* Title & Headline */}
+              <div className="pt-2 sm:pt-4 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="font-headline-md text-3xl sm:text-4xl text-primary font-bold">
+                      {lawyer.name}
+                    </h1>
+                    <p className="text-lg text-on-surface-variant font-medium mt-1">
+                      {lawyer.title}
+                    </p>
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={handleShare} className="p-2.5 rounded-full border border-hairline text-outline hover:text-primary hover:bg-surface-container transition-colors">
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                    {isOwnProfile ? (
+                      <button onClick={() => setShowEditModal(true)} className="flex items-center gap-2 bg-surface-container-low border border-hairline px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-surface-container transition-colors">
+                        <Edit3 className="w-4 h-4" /> Edit Profile
+                      </button>
+                    ) : (
+                      <button onClick={handleOpenBooking} className="flex items-center gap-2 bg-brass text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-brass-hover transition-colors shadow-sm">
+                        <Calendar className="w-4 h-4" /> Book Consultation
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-primary mt-4 text-sm sm:text-base max-w-2xl leading-relaxed font-serif italic">
+                  "{lawyer.headline || lawyer.bio.substring(0, 120) + "..."}"
+                </p>
+
+                <div className="flex flex-wrap items-center gap-4 sm:gap-6 mt-6">
+                  {lawyer.ratingSummary && (
+                    <StarRating ratingSummary={lawyer.ratingSummary} size="lg" />
+                  )}
+                  <div className="w-px h-4 bg-hairline hidden sm:block"></div>
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-on-surface">
+                    <MapPin className="w-4 h-4 text-outline" />
+                    {lawyer.city ? `${lawyer.city}, ${lawyer.state}` : lawyer.jurisdiction}
+                  </div>
+                  <div className="w-px h-4 bg-hairline hidden sm:block"></div>
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+                    <span className={`w-2.5 h-2.5 rounded-full ${lawyer.availability === 'Available today' ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+                    {lawyer.availability}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 self-start md:self-center shrink-0">
-            <button
-              onClick={handleShare}
-              className="p-2.5 rounded-lg border border-hairline hover:bg-surface-container text-on-surface-variant transition-colors"
-              title="Share profile link"
-            >
-              <Share2 className="w-4 h-4" />
-            </button>
-            <Link
-              href={`/messages?lawyerId=${lawyer.id}`}
-              className="bg-primary hover:bg-slate-dark text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-colors flex items-center gap-2 shadow-xs min-h-[40px]"
-            >
-              <Mail className="w-4 h-4" />
-              <span>Send Message</span>
-            </Link>
           </div>
         </div>
 
-        {/* Main Profile Grid: 8 cols bio/cases, 4 cols booking sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Main Column */}
-          <div className="lg:col-span-8 space-y-6 sm:space-y-8">
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
-              <div className="flex flex-col items-center justify-center p-4 bg-surface-container-lowest border border-hairline rounded-xl shadow-xs">
-                <div className="flex items-center gap-1.5 text-brass mb-1">
-                  <ShieldCheck className="w-4 h-4 text-brass" />
-                  <span className="font-headline text-base sm:text-lg font-bold text-primary">Verified</span>
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Main Column */}
+          <div className="lg:col-span-2 space-y-8">
+            
+            {/* Why this lawyer fits (if matched) */}
+            {matchInfo?.matchReason && (
+              <section className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl shadow-dossier border border-hairline relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1.5 h-full bg-brass"></div>
+                <h2 className="font-headline text-xl text-primary font-semibold mb-3 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-brass" /> Why {lawyer.name.split(',')[0]} fits your case
+                </h2>
+                <p className="text-on-surface-variant leading-relaxed">
+                  {matchInfo.matchReason}
+                </p>
+              </section>
+            )}
+
+            {/* About / Bio */}
+            <section className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl shadow-dossier border border-hairline">
+              <h2 className="font-headline text-2xl text-primary font-semibold mb-4">About</h2>
+              <div className="text-on-surface-variant leading-relaxed space-y-4 whitespace-pre-wrap font-body-lg">
+                {lawyer.bio}
+              </div>
+            </section>
+
+            {/* Legal Services & Expertise */}
+            {lawyer.services && lawyer.services.length > 0 && (
+              <section className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl shadow-dossier border border-hairline">
+                <h2 className="font-headline text-2xl text-primary font-semibold mb-6">Expertise & Services</h2>
+                
+                {/* Group services by practice area (mocking this by just listing them for now) */}
+                <div className="space-y-6">
+                  {lawyer.practiceAreas.map((pa, idx) => {
+                    const servicesInArea = lawyer.services?.filter(s => 
+                      // Simple mock grouping, in reality relies on practiceAreaId
+                      s.practiceAreaId ? true : true 
+                    );
+                    
+                    if (!servicesInArea || servicesInArea.length === 0) return null;
+                    
+                    // For simplicity, just list all services under one block if we can't perfectly map them client-side
+                    if (idx > 0) return null; 
+
+                    return (
+                      <div key={idx}>
+                        <h3 className="font-semibold text-primary mb-3 flex items-center gap-2 text-lg">
+                          <Briefcase className="w-5 h-5 text-outline" /> Specialized Services
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {lawyer.services?.map(service => (
+                            <div key={service.id} className="flex items-start gap-2 p-3 rounded-lg border border-hairline bg-surface">
+                              <Check className="w-4 h-4 text-brass shrink-0 mt-0.5" />
+                              <span className="text-sm font-medium text-primary">{service.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <span className="text-xs text-on-surface-variant text-center font-medium">Active Bar License</span>
-              </div>
+              </section>
+            )}
 
-              <div className="flex flex-col items-center justify-center p-4 bg-surface-container-lowest border border-hairline rounded-xl shadow-xs">
-                <span className="font-headline text-base sm:text-lg font-bold text-primary mb-1 tabular-nums">
-                  {lawyer.yearsExperience}+ Years
-                </span>
-                <span className="text-xs text-on-surface-variant text-center font-medium">Practice Experience</span>
-              </div>
+            {/* Notable Cases */}
+            {lawyer.notableCases && lawyer.notableCases.length > 0 && (
+              <section className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl shadow-dossier border border-hairline">
+                <h2 className="font-headline text-2xl text-primary font-semibold mb-6 flex items-center gap-2">
+                  <Gavel className="w-6 h-6 text-slate" /> Representative Matters
+                </h2>
+                <div className="space-y-6">
+                  {lawyer.notableCases.map((caseItem, idx) => (
+                    <div key={idx} className="relative pl-6 sm:pl-8 border-l-2 border-surface-container">
+                      <div className="absolute w-3 h-3 bg-brass rounded-full -left-[7px] top-1.5 ring-4 ring-surface-lowest"></div>
+                      <div className="text-xs font-bold text-brass uppercase tracking-widest mb-1">{caseItem.year}</div>
+                      <h3 className="text-base sm:text-lg font-semibold text-primary mb-2">{caseItem.title}</h3>
+                      <p className="text-on-surface-variant text-sm leading-relaxed">{caseItem.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
-              <div className="flex flex-col items-center justify-center p-4 bg-surface-container-lowest border border-hairline rounded-xl shadow-xs">
-                <Gavel className="w-4 h-4 text-primary mb-1" />
-                <span className="text-xs text-on-surface-variant text-center font-medium">{lawyer.jurisdiction}</span>
+            {/* Client Reviews */}
+            <section id="reviews" className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl shadow-dossier border border-hairline">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b border-hairline">
+                <div>
+                  <h2 className="font-headline text-2xl text-primary font-semibold">Client Reviews</h2>
+                  <p className="text-sm text-outline mt-1">Verified feedback from past matters.</p>
+                </div>
+                {lawyer.ratingSummary && (
+                   <StarRating ratingSummary={lawyer.ratingSummary} size="lg" />
+                )}
+              </div>
+              <ReviewsList reviews={reviews} isLoading={reviewsLoading} />
+            </section>
+
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            
+            {/* Quick Facts Card */}
+            <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-dossier border border-hairline">
+              <h3 className="font-headline-md text-lg text-primary font-semibold mb-5 pb-3 border-b border-hairline">At a Glance</h3>
+              <ul className="space-y-4">
+                <li className="flex justify-between items-center text-sm">
+                  <span className="text-outline flex items-center gap-2"><Briefcase className="w-4 h-4"/> Experience</span>
+                  <span className="font-semibold text-primary">{lawyer.yearsExperience} Years</span>
+                </li>
+                <li className="flex justify-between items-center text-sm">
+                  <span className="text-outline flex items-center gap-2"><Scale className="w-4 h-4"/> Rate</span>
+                  <span className="font-semibold text-primary">₹{lawyer.hourlyRate.toLocaleString("en-IN")}/hr</span>
+                </li>
+                <li className="flex justify-between items-center text-sm">
+                  <span className="text-outline flex items-center gap-2"><Clock className="w-4 h-4"/> Avg. Response</span>
+                  <span className="font-semibold text-primary">{lawyer.responseTimeHours || 24} hours</span>
+                </li>
+                <li className="flex justify-between items-center text-sm">
+                  <span className="text-outline flex items-center gap-2"><Globe className="w-4 h-4"/> Languages</span>
+                  <span className="font-semibold text-primary text-right max-w-[120px] truncate" title={lawyer.languages?.join(", ")}>
+                    {lawyer.languages?.join(", ") || "English"}
+                  </span>
+                </li>
+              </ul>
+
+              {!isOwnProfile && (
+                <button onClick={handleOpenBooking} className="w-full mt-6 bg-brass text-white py-3 rounded-lg text-sm font-semibold hover:bg-brass-hover transition-colors shadow-sm btn-editorial-brass">
+                  Request Consultation
+                </button>
+              )}
+            </div>
+
+            {/* Credentials Card */}
+            <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-dossier border border-hairline">
+              <h3 className="font-headline-md text-lg text-primary font-semibold mb-5 pb-3 border-b border-hairline">Credentials</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-xs uppercase tracking-wider font-semibold text-outline mb-1">State Bar License</div>
+                  <div className="text-sm font-medium text-primary flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>{lawyer.jurisdiction}</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wider font-semibold text-outline mb-1">Background Check</div>
+                  <div className="text-sm font-medium text-primary flex items-center gap-2">
+                    {lawyer.isVerified ? (
+                      <>
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        Verified via Advocato Trust
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-4 h-4 text-amber-500" />
+                        Verification Pending
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Biography Section */}
-            <section className="bg-surface-container-lowest p-6 sm:p-7 rounded-2xl border border-hairline shadow-xs space-y-3">
-              <h2 className="font-headline text-lg sm:text-xl text-primary font-semibold">About the Attorney</h2>
-              <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed font-normal">{lawyer.bio}</p>
-            </section>
-
-            {/* Practice Areas */}
-            <section className="bg-surface-container-lowest p-6 sm:p-7 rounded-2xl border border-hairline shadow-xs space-y-3">
-              <h2 className="font-headline text-lg sm:text-xl text-primary font-semibold">Practice Specialties</h2>
+            {/* Practice Areas Summary */}
+            <div className="bg-surface-container-lowest p-6 rounded-2xl shadow-dossier border border-hairline">
+              <h3 className="font-headline-md text-lg text-primary font-semibold mb-4">Focus Areas</h3>
               <div className="flex flex-wrap gap-2">
-                {lawyer.practiceAreas.map((area, idx) => (
-                  <span
-                    key={idx}
-                    className="bg-surface-container text-primary px-3 py-1.5 rounded-md text-xs font-semibold border border-hairline"
-                  >
-                    {area}
+                {lawyer.practiceAreas.map((pa, idx) => (
+                  <span key={idx} className="bg-surface-container-low px-2.5 py-1 rounded text-xs font-medium text-primary border border-hairline">
+                    {pa}
                   </span>
                 ))}
               </div>
-            </section>
-
-            {/* Notable Case Outcomes */}
-            <section className="bg-surface-container-lowest p-6 sm:p-7 rounded-2xl border border-hairline shadow-xs space-y-4">
-              <h2 className="font-headline text-lg sm:text-xl text-primary font-semibold">
-                Past Case Results &amp; Experience
-              </h2>
-              <div className="flex flex-col divide-y divide-hairline">
-                {lawyer.notableCases.map((outcome, idx) => (
-                  <div key={idx} className="py-4 first:pt-0 last:pb-0 space-y-1">
-                    <div className="flex justify-between items-start">
-                      <h3 className="text-sm font-semibold text-primary">{outcome.title}</h3>
-                      <span className="text-xs font-semibold text-brass tabular-nums">{outcome.year}</span>
-                    </div>
-                    <p className="text-xs text-on-surface-variant leading-relaxed">{outcome.summary}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          {/* Sticky Booking Sidebar (4 cols on desktop) */}
-          <div className="hidden lg:flex lg:col-span-4 flex-col gap-4 sticky top-24">
-            <div className="bg-surface-container-lowest p-6 rounded-2xl border border-hairline shadow-editorial space-y-5">
-              <div>
-                <span className="text-[11px] uppercase tracking-wider font-semibold text-on-surface-variant block">
-                  Consultation Rate
-                </span>
-                <div className="text-3xl font-bold text-primary tabular-nums mt-0.5">
-                  ₹{lawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-xs font-normal text-on-surface-variant">/ hour</span>
-                </div>
-                <p className="text-xs text-emerald-700 font-medium mt-1">✓ Available today • 100% Confidential</p>
-              </div>
-
-              <div className="border-t border-hairline pt-4 space-y-2.5 text-xs text-on-surface-variant">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-brass shrink-0" />
-                  <span>30-Minute Initial Private Consultation</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-brass shrink-0" />
-                  <span>Protected by Attorney-Client Privilege</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-brass shrink-0" />
-                  <span>Document Review Included</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleOpenBooking}
-                className="w-full bg-brass hover:bg-brass-hover text-white text-sm font-semibold py-3.5 px-6 rounded-lg shadow-sm hover:shadow-md btn-editorial-brass flex items-center justify-center gap-2 min-h-[48px]"
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Book a Consultation</span>
-              </button>
-
-              <Link
-                href={`/messages?lawyerId=${lawyer.id}`}
-                className="block text-center text-xs font-medium text-slate hover:text-primary transition-all duration-150 active:scale-95 py-1"
-              >
-                Send Private Message &rarr;
-              </Link>
             </div>
+
           </div>
         </div>
       </div>
 
-      {/* Bottom Floating Bar on Mobile */}
-      <div className="lg:hidden fixed bottom-16 left-0 right-0 p-4 bg-surface/95 backdrop-blur-xl border-t border-hairline z-30 shadow-editorial">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <span className="text-xs text-on-surface-variant">Rate</span>
-            <span className="text-sm font-bold text-primary">₹{lawyer.hourlyRate.toLocaleString("en-IN")} / hr</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleOpenBooking}
-            className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-6 py-3 rounded-lg shadow-sm hover:shadow-md btn-editorial-brass flex items-center gap-2 min-h-[44px]"
-          >
-            <span>Book a Consultation</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Booking Slot Modal */}
+      {/* Booking Modal (Preserved logic) */}
       {showBookingModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface rounded-xl border border-hairline shadow-editorial w-full max-w-lg p-6 relative animate-in fade-in zoom-in-95 duration-200">
@@ -385,11 +485,11 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-hairline">
+            <div className="flex items-center gap-4 mb-5 pb-4 border-b border-hairline">
               <img
                 src={lawyer.avatar}
                 alt={lawyer.name}
-                className="w-12 h-12 rounded-full object-cover border border-hairline"
+                className="w-14 h-14 rounded-full object-cover border border-hairline"
               />
               <div>
                 <h3 className="font-headline text-lg font-semibold text-primary">{lawyer.name}</h3>
@@ -401,7 +501,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface mb-2">
-                  Consultation Format
+                  How would you like to talk?
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -426,14 +526,14 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                     }`}
                   >
                     Phone Call
-                    <span className="block text-[10px] font-normal opacity-70 mt-0.5">Direct dial-in conference</span>
+                    <span className="block text-[10px] font-normal opacity-70 mt-0.5">Direct phone call</span>
                   </button>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface mb-2">
-                  Choose an Appointment Time
+                  Choose a Time
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
@@ -471,9 +571,6 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Pre-authorized via Escrow • Zero fee until consultation concludes</span>
                 </div>
-                <p className="text-[10px] text-on-surface-variant leading-relaxed">
-                  100% private and protected by attorney-client confidentiality. Free cancellation up to 2 hours prior to call.
-                </p>
               </div>
 
               <button
@@ -489,96 +586,58 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Edit Profile Modal (for lawyers) */}
-      {showEditModal && (
+      {/* Edit Profile Modal */}
+      {showEditModal && isOwnProfile && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface rounded-xl border border-hairline shadow-editorial w-full max-w-lg p-6 relative animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-hairline mb-4">
-              <h3 className="font-headline text-lg font-semibold text-primary">Edit Attorney Profile</h3>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="text-on-surface-variant hover:text-primary"
-              >
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-surface rounded-xl border border-hairline shadow-editorial w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            <button onClick={() => setShowEditModal(false)} className="absolute top-4 right-4 text-on-surface-variant hover:text-primary">
+              <X className="w-5 h-5" />
+            </button>
+            
+            <h2 className="text-xl font-headline font-semibold text-primary mb-6">Edit Professional Profile</h2>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Full Name</label>
+                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Professional Title</label>
+                  <input type="text" value={editForm.title} onChange={(e) => setEditForm({...editForm, title: e.target.value})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold text-on-surface mb-1.5">Profile Tagline / Headline</label>
+                <input type="text" value={editForm.headline} onChange={(e) => setEditForm({...editForm, headline: e.target.value})} placeholder="e.g. Protecting workplace rights across Delhi" className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Hourly Rate (₹)</label>
+                  <input type="number" value={editForm.hourlyRate} onChange={(e) => setEditForm({...editForm, hourlyRate: Number(e.target.value)})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Jurisdiction / State Bar</label>
+                  <input type="text" value={editForm.jurisdiction} onChange={(e) => setEditForm({...editForm, jurisdiction: e.target.value})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-on-surface mb-1.5">Full Biography</label>
+                <textarea value={editForm.bio} onChange={(e) => setEditForm({...editForm, bio: e.target.value})} rows={5} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass resize-none" />
+              </div>
             </div>
 
-            <form onSubmit={handleSaveProfile} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-primary mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-slate"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-primary mb-1">Professional Title / Headline</label>
-                <input
-                  type="text"
-                  required
-                  value={editForm.title}
-                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                  className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-slate"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-primary mb-1">Hourly Consultation Rate (₹ INR)</label>
-                  <input
-                    type="number"
-                    required
-                    value={editForm.hourlyRate}
-                    onChange={(e) => setEditForm({ ...editForm, hourlyRate: Number(e.target.value) })}
-                    className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-slate"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-primary mb-1">Jurisdiction / State Bar Council</label>
-                  <input
-                    type="text"
-                    required
-                    value={editForm.jurisdiction}
-                    onChange={(e) => setEditForm({ ...editForm, jurisdiction: e.target.value })}
-                    className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-slate"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-primary mb-1">Attorney Biography</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={editForm.bio}
-                  onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                  className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-slate resize-none"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 rounded-lg border border-hairline text-on-surface-variant hover:bg-surface-container"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-lg bg-brass text-white font-semibold hover:bg-brass-hover shadow-xs"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
+            <div className="mt-8 flex justify-end gap-3">
+              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm font-medium text-on-surface hover:text-primary">Cancel</button>
+              <button onClick={handleSaveProfile} className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-slate-dark btn-editorial">Save Changes</button>
+            </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
