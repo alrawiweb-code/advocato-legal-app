@@ -193,6 +193,17 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Sync session state to a cookie so Server Components/APIs know we're authenticated (for demo accounts)
+  useEffect(() => {
+    if (typeof document !== "undefined" && !isLoadingAuth) {
+      if (sessionUser) {
+        document.cookie = "advocato_demo_auth=true; path=/; max-age=604800;";
+      } else {
+        document.cookie = "advocato_demo_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;";
+      }
+    }
+  }, [sessionUser, isLoadingAuth]);
+
   const login = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string }> => {
     try {
       // 1. Direct Demo Persona Login

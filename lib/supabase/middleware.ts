@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
 
   // Protect /lawyers and its subroutes (Marketplace Phase 2 constraint)
   if (request.nextUrl.pathname.startsWith("/lawyers")) {
-    if (!user) {
+    const hasDemoAuth = request.cookies.has("advocato_demo_auth");
+    if (!user && !hasDemoAuth) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
       return NextResponse.redirect(loginUrl);
