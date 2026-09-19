@@ -110,6 +110,7 @@ export interface MarketplaceLawyerCard {
   yearsExperience: number;
   jurisdiction: string;
   state?: string;
+  city?: string;
   languages?: string[];
   practiceAreas: string[];
   primaryServices: string[];   // Top 3 services for card display

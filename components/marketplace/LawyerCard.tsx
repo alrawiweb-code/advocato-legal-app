@@ -42,7 +42,9 @@ export default function LawyerCard({ lawyer, matchScore }: LawyerCardProps) {
                 {lawyer.name}
               </h3>
               {lawyer.isVerified && (
-                <ShieldCheck className="w-4 h-4 text-brass" title="Verified by Advocato" />
+                <span title="Verified by Advocato">
+                  <ShieldCheck className="w-4 h-4 text-brass" />
+                </span>
               )}
             </div>
             <p className="text-sm text-outline mt-0.5 font-medium">{lawyer.title}</p>

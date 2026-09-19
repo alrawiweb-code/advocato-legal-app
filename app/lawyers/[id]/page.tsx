@@ -18,7 +18,8 @@ import {
   X,
   MapPin,
   Globe,
-  Briefcase
+  Briefcase,
+  Sparkles
 } from "lucide-react";
 
 import { getOrCreateConsultationForLawyer } from "@/lib/data/consultations";

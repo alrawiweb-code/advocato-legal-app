@@ -46,7 +46,7 @@ export async function GET(
       }
 
       // Fetch actual services if we have service_ids
-      let populatedServices = [];
+      let populatedServices: any[] = [];
       if (l.service_ids && l.service_ids.length > 0) {
         const { data: servicesData } = await supabase
           .from("legal_services")
