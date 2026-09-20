@@ -308,6 +308,20 @@ function LoginFormContent() {
                   </>
                 )}
               </button>
+
+              <div className="pt-2 border-t border-hairline/60 flex items-center justify-between text-[11px] text-on-surface-variant">
+                <span>Admissions Admin testing:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail("alrawiweb@gmail.com");
+                    setPassword("Password123!");
+                  }}
+                  className="text-brass hover:underline font-semibold"
+                >
+                  Fill Admin Account
+                </button>
+              </div>
             </form>
           )}
 
