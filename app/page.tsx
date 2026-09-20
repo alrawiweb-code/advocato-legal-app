@@ -57,7 +57,7 @@ function LawyerDashboardView() {
 
   return (
     <div className="flex-1 flex flex-col items-center bg-surface w-full">
-      <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 md:px-8 pt-8 sm:pt-12 pb-16">
+      <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 pb-16">
         {/* Masthead Banner */}
         <div className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl border border-hairline shadow-xs mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
@@ -350,7 +350,7 @@ function ClientHomeView() {
   return (
     <div className="flex-1 flex flex-col items-center bg-surface">
       {/* Editorial Masthead Hero Container */}
-      <div className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 md:px-8 pt-8 sm:pt-14 md:pt-20 pb-12 sm:pb-18 flex flex-col items-center">
+      <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 md:px-8 pt-8 sm:pt-12 md:pt-16 pb-12 sm:pb-16 flex flex-col items-center">
         {isAdmin && (
           <div className="w-full max-w-2xl mx-auto mb-6 p-3 px-4 rounded-xl bg-primary text-white border border-brass/40 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-2 text-xs">
@@ -422,7 +422,7 @@ function ClientHomeView() {
         </div>
 
         {/* How It Works Section */}
-        <div id="how-it-works" className="w-full max-w-5xl mt-14 sm:mt-16 pt-10 sm:pt-12 border-t border-hairline">
+        <div id="how-it-works" className="w-full mt-12 sm:mt-16 pt-10 sm:pt-12 border-t border-hairline">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
             {/* Left Column (7 cols): How It Works */}
             <div className="lg:col-span-7 bg-surface-container-lowest p-6 sm:p-8 rounded-lg border border-hairline shadow-dossier flex flex-col justify-between">

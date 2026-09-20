@@ -44,7 +44,7 @@ export function Header() {
   if (isLoginPage) {
     return (
       <header className="fixed top-0 left-0 w-full z-50 bg-surface/90 backdrop-blur-xl border-b border-hairline/60 transition-all">
-        <div className="max-w-[1360px] mx-auto h-16 px-4 md:px-8 flex items-center justify-between pt-safe">
+        <div className="max-w-[1280px] mx-auto h-16 px-4 sm:px-6 md:px-8 flex items-center justify-between pt-safe">
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-brass shadow-sm">
               <Scale className="w-4 h-4 text-brass" />
@@ -75,7 +75,7 @@ export function Header() {
   return (
     <>
       <header className="fixed top-0 left-0 w-full z-50 bg-surface/90 backdrop-blur-xl border-b border-hairline/60 transition-all">
-        <div className="max-w-[1360px] mx-auto h-16 px-4 md:px-8 flex items-center justify-between pt-safe">
+        <div className="max-w-[1280px] mx-auto h-16 px-4 sm:px-6 md:px-8 flex items-center justify-between pt-safe">
           {/* Brand Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-brass group-hover:bg-primary-container transition-colors shadow-sm">

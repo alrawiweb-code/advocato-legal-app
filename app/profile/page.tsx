@@ -39,7 +39,7 @@ export default function ProfilePage() {
 
   return (
     <div className="flex-1 flex flex-col bg-background min-h-[calc(100dvh-4rem)]">
-      <div className="max-w-[1240px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 pb-24 md:pb-12">
+      <div className="max-w-[1280px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 pb-16">
         <div className="pb-6 border-b border-hairline mb-6 sm:mb-8">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-surface-container-low border border-hairline text-[11px] font-semibold text-primary mb-2">
             <Scale className="w-3.5 h-3.5 text-brass" />

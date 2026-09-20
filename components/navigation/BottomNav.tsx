@@ -27,8 +27,8 @@ export function BottomNav() {
     } catch (e) {}
   }, [role, pathname]);
 
-  // Completely hide bottom navigation on the login screen
-  if (pathname === "/login") {
+  // Completely hide bottom navigation on login, admin, and full-screen consultation screens
+  if (pathname === "/login" || pathname.startsWith("/admin") || pathname.startsWith("/consultation")) {
     return null;
   }
 

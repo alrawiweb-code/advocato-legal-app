@@ -78,7 +78,7 @@ export default function CasesPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-background min-h-[calc(100dvh-4rem)]">
-      <div className="max-w-[1240px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 pb-24 md:pb-12">
+      <div className="max-w-[1280px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 pb-16">
         {/* Header */}
         <div className="pb-6 border-b border-hairline mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

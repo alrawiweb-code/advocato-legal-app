@@ -76,7 +76,7 @@ export default function AdminAdmissionsQueuePage() {
 
   return (
     <div className="flex-1 flex flex-col bg-surface p-4 sm:p-6 md:p-8">
-      <div className="w-full max-w-[1360px] mx-auto space-y-8">
+      <div className="w-full max-w-[1280px] mx-auto space-y-8">
         {/* Page Title & Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-hairline">
           <div>

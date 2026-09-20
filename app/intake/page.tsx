@@ -342,7 +342,7 @@ export default function IntakePage() {
 
   return (
     <div className="flex-1 flex flex-col bg-surface min-h-[calc(100dvh-4rem)]">
-      <div className="max-w-[1240px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 flex flex-col flex-grow">
+      <div className="max-w-[1280px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 flex flex-col flex-grow">
         {/* Friendly Header */}
         <div className="pb-6 border-b border-hairline mb-8">
           <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-brass mb-2 px-2.5 py-1 rounded-md bg-surface-container-low border border-hairline">
@@ -651,7 +651,7 @@ export default function IntakePage() {
 
       {/* Sticky Bottom Action Bar */}
       <div className="p-4 md:px-8 bg-surface/95 backdrop-blur-md sticky bottom-16 md:bottom-0 z-20 border-t border-hairline mt-auto shadow-xs">
-        <div className="max-w-[1240px] mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-[1280px] mx-auto flex items-center justify-between gap-4">
           <button
             type="button"
             onClick={() => handleContinue(true)}

@@ -235,7 +235,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
       )}
 
       {/* Main Content Area */}
-      <div className="max-w-[1100px] w-full mx-auto px-4 sm:px-6 md:px-8 pt-6 pb-32">
+      <div className="max-w-[1280px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-8 pb-16">
         
         {/* Back Link */}
         <Link href="/lawyers" className="inline-flex items-center gap-1.5 text-sm font-medium text-outline-variant hover:text-primary transition-colors mb-6">

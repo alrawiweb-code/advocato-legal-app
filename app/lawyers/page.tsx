@@ -115,7 +115,7 @@ function LawyersDirectoryContent() {
 
   return (
     <div className="flex-1 flex flex-col bg-background">
-      <div className="max-w-[1360px] w-full mx-auto px-4 sm:px-6 md:px-8 pt-8 pb-32 md:pb-16">
+      <div className="max-w-[1280px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-10 pb-16">
         
         {/* Header Section */}
         <div className="pb-5 mb-6">
