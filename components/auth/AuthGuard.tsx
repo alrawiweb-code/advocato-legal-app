@@ -1,28 +1,36 @@
 "use client";
 
-import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, Suspense } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { Scale } from "lucide-react";
 
-export function AuthGuard({ children }: { children: React.ReactNode }) {
+// Routes that strictly require user authentication
+const PROTECTED_PREFIXES = ["/cases", "/messages", "/profile", "/admin", "/lawyer/verify"];
+
+function AuthGuardInternal({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoadingAuth } = useUserRole();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const isLoginPage = pathname === "/login";
+  const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     if (!isLoadingAuth) {
-      if (!isAuthenticated && !isLoginPage) {
-        router.replace("/login");
+      if (!isAuthenticated && isProtectedRoute) {
+        const target = encodeURIComponent(pathname);
+        router.replace(`/login?redirect=${target}`);
       } else if (isAuthenticated && isLoginPage) {
-        router.replace("/");
+        const redirectParam = searchParams?.get("redirect") || "/";
+        router.replace(redirectParam);
       }
     }
-  }, [isAuthenticated, isLoadingAuth, isLoginPage, router]);
+  }, [isAuthenticated, isLoadingAuth, isProtectedRoute, isLoginPage, pathname, router, searchParams]);
 
-  if (isLoadingAuth && !isLoginPage) {
+  // Loading state: ONLY show loading screen for protected routes when auth is resolving
+  if (isLoadingAuth && isProtectedRoute) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-brass shadow-lg mb-4 animate-pulse">
@@ -40,7 +48,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // If unauthenticated and on a protected page, block rendering while redirecting
-  if (!isAuthenticated && !isLoginPage) {
+  if (!isAuthenticated && isProtectedRoute) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center text-brass mb-3">
@@ -52,4 +60,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<>{children}</>}>
+      <AuthGuardInternal>{children}</AuthGuardInternal>
+    </Suspense>
+  );
 }

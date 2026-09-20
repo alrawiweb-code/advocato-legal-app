@@ -339,7 +339,9 @@ function LawyerDashboardView() {
 }
 
 function ClientHomeView() {
+  const { role, currentUser } = useUserRole();
   const [lawyers, setLawyers] = useState<Lawyer[]>([]);
+  const isAdmin = role === "admin" || currentUser.email === "alrawiweb@gmail.com";
 
   useEffect(() => {
     setLawyers(getAllLawyers());
@@ -349,6 +351,22 @@ function ClientHomeView() {
     <div className="flex-1 flex flex-col items-center bg-surface">
       {/* Editorial Masthead Hero Container */}
       <div className="w-full max-w-[1240px] mx-auto px-4 sm:px-6 md:px-8 pt-8 sm:pt-14 md:pt-20 pb-12 sm:pb-18 flex flex-col items-center">
+        {isAdmin && (
+          <div className="w-full max-w-2xl mx-auto mb-6 p-3 px-4 rounded-xl bg-primary text-white border border-brass/40 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-2 text-xs">
+              <ShieldCheck className="w-4 h-4 text-brass" />
+              <span>Logged in with <strong>Regulatory Administrator</strong> privileges.</span>
+            </div>
+            <Link
+              href="/admin"
+              className="text-xs font-semibold bg-brass hover:bg-brass-hover text-white px-3 py-1.5 rounded-lg shadow-2xs transition-colors flex items-center gap-1"
+            >
+              <span>Admissions Desk</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
         {/* Reassuring Eyebrow */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-low border border-hairline mb-5 sm:mb-8 text-[11px] font-semibold tracking-wider uppercase text-primary shadow-2xs">
           <Scale className="w-3.5 h-3.5 text-brass" />
@@ -379,13 +397,19 @@ function ClientHomeView() {
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
 
-          <Link
-            href="/#how-it-works"
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById("how-it-works");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
             className="flex-1 bg-surface border border-hairline hover:bg-surface-container text-primary font-semibold text-xs sm:text-sm rounded-lg py-3.5 px-7 flex items-center justify-center gap-1.5 btn-editorial-secondary min-h-[48px]"
           >
             <span>How Matching Works</span>
             <ArrowRight className="w-4 h-4 text-on-surface-variant" />
-          </Link>
+          </button>
         </div>
 
         <div className="text-center mt-4 sm:mt-5">

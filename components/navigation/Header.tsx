@@ -283,7 +283,19 @@ export function Header() {
               </button>
             </div>
 
-            {role === "client" ? (
+            {/* Quick Admin Access Link */}
+            {(role === "admin" || currentUser.email === "alrawiweb@gmail.com") && (
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-1.5 bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-2xs hover:shadow-xs transition-all whitespace-nowrap"
+                title="Access Admissions Admin Panel"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Admin Panel</span>
+              </Link>
+            )}
+
+            {role === "client" && currentUser.email !== "alrawiweb@gmail.com" ? (
               <Link
                 href="/intake"
                 className="hidden md:inline-flex items-center gap-1.5 bg-primary hover:bg-slate-dark text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm hover:shadow-md min-h-[40px] whitespace-nowrap btn-editorial"

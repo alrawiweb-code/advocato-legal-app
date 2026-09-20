@@ -148,6 +148,8 @@ export function VerificationModal({ isOpen, onClose, onSuccess }: VerificationMo
 
   const isPendingReview = existingApp?.status === "PENDING" || existingApp?.status === "SUBMITTED" || existingApp?.status === "UNDER_REVIEW";
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-surface-container-lowest border border-hairline rounded-2xl shadow-editorial w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">

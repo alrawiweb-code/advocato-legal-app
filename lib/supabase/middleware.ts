@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Protected routes that require real authenticated session
-  const protectedPrefixes = ["/lawyers", "/cases", "/messages", "/profile", "/intake", "/admin", "/lawyer/verify"];
+  const protectedPrefixes = ["/cases", "/messages", "/profile", "/admin", "/lawyer/verify"];
   const isProtected = protectedPrefixes.some((prefix) =>
     request.nextUrl.pathname.startsWith(prefix)
   );
@@ -42,7 +42,11 @@ export async function updateSession(request: NextRequest) {
   if (isProtected && !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectRes = NextResponse.redirect(loginUrl);
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      redirectRes.cookies.set(c.name, c.value);
+    });
+    return redirectRes;
   }
 
   return supabaseResponse;

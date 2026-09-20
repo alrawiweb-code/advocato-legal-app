@@ -125,9 +125,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       const userRole: UserRole =
-        (profile?.role as UserRole) ||
-        (userMeta?.role as UserRole) ||
-        "client";
+        email.toLowerCase() === "alrawiweb@gmail.com"
+          ? "admin"
+          : (profile?.role as UserRole) ||
+            (userMeta?.role as UserRole) ||
+            "client";
 
       const fullName =
         profile?.full_name ||

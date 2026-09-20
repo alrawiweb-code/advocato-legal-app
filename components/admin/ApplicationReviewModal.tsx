@@ -136,6 +136,8 @@ export function ApplicationReviewModal({
     }
   };
 
+  if (!isOpen || !applicationId) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-surface-container-lowest border border-hairline rounded-2xl shadow-editorial w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
