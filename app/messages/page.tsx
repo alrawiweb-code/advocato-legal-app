@@ -44,8 +44,9 @@ import {
 } from "@/lib/data/consultations";
 import { getAllLawyers } from "@/lib/data/lawyers";
 import { Consultation, ConsultationMessage, DocumentAttachment, Lawyer } from "@/types";
-import { useUserRole } from "@/lib/context/RoleContext";
+import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import { createClient } from "@/lib/supabase/client";
+import { getUserMatters } from "@/lib/supabase/matters";
 import { uploadEvidentiaryDocument, uploadVoiceNoteBlob } from "@/lib/storage/documents";
 import { VideoConsultationRoom } from "@/components/consultation/VideoConsultationRoom";
 
@@ -55,7 +56,7 @@ function MessagesView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const lawyerIdParam = searchParams.get("lawyerId");
-  const idParam = searchParams.get("id");
+  const matterIdParam = searchParams.get("matterId") || searchParams.get("id");
 
   const { role, activeLawyer, currentUser } = useUserRole();
 
@@ -110,44 +111,129 @@ function MessagesView() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Initialize consultations and handle lawyerId / id parameters
+  // 1. Initialize consultations: load from Supabase matters, fallback to storage
   useEffect(() => {
-    const stored = getStoredConsultations();
-    setAllLawyersList(getAllLawyers());
+    async function initConsultations() {
+      setAllLawyersList(getAllLawyers());
 
-    let targetMatterId = stored.length > 0 ? stored[0].id : "";
-    let shouldShowChatOnMobile = false;
+      let activeList: Consultation[] = [];
 
-    if (lawyerIdParam) {
-      const dynamicConsultation = getOrCreateConsultationForLawyer(lawyerIdParam, currentUser.name);
-      const updatedList = [
-        dynamicConsultation,
-        ...stored.filter((c) => c.id !== dynamicConsultation.id),
-      ];
-      setConsultations(updatedList);
-      saveStoredConsultations(updatedList);
-      targetMatterId = dynamicConsultation.id;
-      shouldShowChatOnMobile = true;
-    } else if (idParam) {
-      const existing = stored.find((c) => c.id === idParam);
-      if (existing) {
-        targetMatterId = existing.id;
+      try {
+        const { matters: dbMatters, error } = await getUserMatters();
+        if (!error && dbMatters && dbMatters.length > 0) {
+          activeList = dbMatters.map((m) => {
+            const counselorName = m.lawyer?.full_name || "Assigned Counsel";
+            return {
+              id: m.id,
+              matterNumber: m.matter_number,
+              caseTitle: m.case_title,
+              category: m.category,
+              status: (m.status as any) || "active",
+              clientName: m.client?.full_name || "Client",
+              lawyer: {
+                id: m.lawyer?.id || m.lawyer_id,
+                name: counselorName,
+                title: `${m.category} Attorney`,
+                avatar: m.lawyer?.avatar_url || getInitialsAvatar(counselorName),
+                rating: 5.0,
+                reviewCount: 1,
+                hourlyRate: 2500,
+                isVerified: true,
+                availability: "Available today",
+                yearsExperience: 5,
+                jurisdiction: m.jurisdiction || "Delhi (DL)",
+                tags: [m.category],
+                practiceAreas: [m.category],
+                bio: "Licensed counsel handling active matter.",
+                notableCases: [],
+              },
+              messages: [],
+              lastActive: "Active today",
+              unreadCount: 0,
+            };
+          });
+        }
+      } catch (err) {
+        console.warn("Could not load matters from DB:", err);
+      }
+
+      if (activeList.length === 0) {
+        activeList = getStoredConsultations();
+      }
+
+      let targetMatterId = activeList.length > 0 ? activeList[0].id : "";
+      let shouldShowChatOnMobile = false;
+
+      if (lawyerIdParam) {
+        const dynamicConsultation = getOrCreateConsultationForLawyer(lawyerIdParam, currentUser.name);
+        const updatedList = [
+          dynamicConsultation,
+          ...activeList.filter((c) => c.id !== dynamicConsultation.id),
+        ];
+        activeList = updatedList;
+        targetMatterId = dynamicConsultation.id;
         shouldShowChatOnMobile = true;
+      } else if (matterIdParam) {
+        const existing = activeList.find((c) => c.id === matterIdParam);
+        if (existing) {
+          targetMatterId = existing.id;
+          shouldShowChatOnMobile = true;
+        }
       }
-      setConsultations(stored);
-    } else {
-      setConsultations(stored);
-      if (stored.length > 0) {
-        targetMatterId = stored[0].id;
-      }
-      shouldShowChatOnMobile = false;
+
+      setConsultations(activeList);
+      setActiveMatterId(targetMatterId);
+      setMobileShowChat(shouldShowChatOnMobile);
     }
 
-    setActiveMatterId(targetMatterId);
-    setMobileShowChat(shouldShowChatOnMobile);
-  }, [lawyerIdParam, idParam, currentUser.name, role]);
+    initConsultations();
+  }, [lawyerIdParam, matterIdParam, currentUser.name, role]);
 
-  // 2. Supabase Realtime Channel Subscription for instant duplex messaging
+  // 2. Load historical messages from Supabase for the active matter
+  useEffect(() => {
+    if (!activeMatterId) return;
+
+    async function loadMatterMessages() {
+      const supabase = createClient();
+      try {
+        const { data: dbMessages, error } = await supabase
+          .from("messages")
+          .select("*, document:documents(*)")
+          .eq("matter_id", activeMatterId)
+          .order("created_at", { ascending: true });
+
+        if (!error && dbMessages && dbMessages.length > 0) {
+          const mappedMsgs: ConsultationMessage[] = dbMessages.map((m: any) => ({
+            id: m.id,
+            senderRole: m.sender_role,
+            senderName: m.sender_role === "lawyer" ? "Attorney" : "Client",
+            text: m.text || "",
+            timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "read",
+            document: m.document ? {
+              id: m.document.id,
+              name: m.document.name,
+              size: `${Math.round(m.document.size_bytes / 1024)} KB`,
+              category: m.document.category || "Evidence",
+              previewUrl: m.document.storage_path,
+              downloadUrl: m.document.storage_path,
+              isReviewed: m.document.is_reviewed,
+            } : undefined,
+          }));
+
+          setConsultations((prev) =>
+            prev.map((c) => (c.id === activeMatterId ? { ...c, messages: mappedMsgs } : c))
+          );
+        }
+      } catch (err) {
+        console.warn("Could not load messages from DB:", err);
+      }
+    }
+
+    loadMatterMessages();
+  }, [activeMatterId]);
+
+  // 3. Supabase Realtime Channel Subscription for instant duplex messaging & DB changes
   useEffect(() => {
     if (!activeMatterId) return;
     const supabase = createClient();
@@ -160,7 +246,6 @@ function MessagesView() {
           setConsultations((prev) =>
             prev.map((c) => {
               if (c.id === activeMatterId) {
-                // Prevent duplicate insertions
                 if (c.messages.some((m) => m.id === payload.id)) return c;
                 return {
                   ...c,
@@ -173,6 +258,41 @@ function MessagesView() {
           );
         }
       })
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `matter_id=eq.${activeMatterId}`,
+        },
+        (payload) => {
+          const r: any = payload.new;
+          if (!r) return;
+          const incomingMsg: ConsultationMessage = {
+            id: r.id,
+            senderRole: r.sender_role,
+            senderName: r.sender_role === "lawyer" ? "Attorney" : "Client",
+            text: r.text || "",
+            timestamp: new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "read",
+          };
+
+          setConsultations((prev) =>
+            prev.map((c) => {
+              if (c.id === activeMatterId) {
+                if (c.messages.some((m) => m.id === incomingMsg.id || m.text === incomingMsg.text)) return c;
+                return {
+                  ...c,
+                  messages: [...c.messages, incomingMsg],
+                  lastActive: "online",
+                };
+              }
+              return c;
+            })
+          );
+        }
+      )
       .on("broadcast", { event: "typing" }, ({ payload }) => {
         if (payload && payload.senderRole !== role) {
           setIsCounterpartTyping(Boolean(payload.isTyping));
@@ -234,7 +354,7 @@ function MessagesView() {
     });
   };
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim() || !activeConsultation) return;
 
@@ -270,6 +390,22 @@ function MessagesView() {
 
     // Broadcast across Supabase Realtime to connected peers
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Persist to Supabase messages table if active
+    if (user && activeConsultation?.id) {
+      try {
+        await supabase.from("messages").insert({
+          matter_id: activeConsultation.id,
+          sender_id: user.id,
+          sender_role: role,
+          text: currentText,
+        });
+      } catch (err) {
+        console.warn("Message DB insertion notice:", err);
+      }
+    }
+
     supabase.channel(`matter-chat-${activeMatterId}`).send({
       type: "broadcast",
       event: "new-message",
@@ -280,8 +416,6 @@ function MessagesView() {
       event: "typing",
       payload: { isTyping: false, senderRole: role },
     });
-
-    // Real replies arrive via Supabase Realtime broadcast (channel subscription above)
   };
 
   // Native Web Audio Recorder Start
@@ -400,6 +534,35 @@ function MessagesView() {
     saveStoredConsultations(updated);
 
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user && activeConsultation?.id) {
+      try {
+        const { data: insertedDoc } = await supabase.from("documents").insert({
+          matter_id: activeConsultation.id,
+          uploader_id: user.id,
+          name: file.name,
+          size_bytes: file.size,
+          mime_type: file.type || "application/octet-stream",
+          storage_path: result.storagePath,
+          category: "Case Exhibit",
+          sha256_hash: result.sha256Hash,
+          is_privileged: true,
+          is_reviewed: false,
+        }).select("id").single();
+
+        await supabase.from("messages").insert({
+          matter_id: activeConsultation.id,
+          sender_id: user.id,
+          sender_role: role,
+          text: `Attached privileged evidentiary exhibit: ${file.name}`,
+          document_id: insertedDoc?.id || null,
+        });
+      } catch (err) {
+        console.warn("Document DB insertion notice:", err);
+      }
+    }
+
     supabase.channel(`matter-chat-${activeMatterId}`).send({
       type: "broadcast",
       event: "new-message",

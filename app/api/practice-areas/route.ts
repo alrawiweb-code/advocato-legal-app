@@ -7,13 +7,10 @@ export async function GET() {
   try {
     const supabase = await createClient();
 
-    // 1. Authorization: API must be authenticated (Marketplace Phase 2 constraint)
+    // 1. Authorization: API must be authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    const cookieStore = await cookies();
-    const hasDemoAuth = cookieStore.has("advocato_demo_auth");
 
-    if ((authError || !user) && !hasDemoAuth) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: "Unauthorized. The Advocato marketplace requires authentication." },
         { status: 401 }

@@ -20,25 +20,35 @@ import { getAllLawyers } from "@/lib/data/lawyers";
 import { getStoredConsultations } from "@/lib/data/consultations";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { Lawyer, Consultation } from "@/types";
+import { getUserMatters } from "@/lib/supabase/matters";
+import { VerificationModal } from "@/components/lawyer/VerificationModal";
 
 function LawyerDashboardView() {
   const { activeLawyer, currentUser } = useUserRole();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+
+  const isVerified = Boolean(activeLawyer?.isVerified ?? currentUser.isVerified);
+  const verificationStatus = activeLawyer?.verificationStatus || currentUser.verificationStatus || "NOT_VERIFIED";
 
   useEffect(() => {
-    const list = getStoredConsultations();
-    const lawyerMatters = activeLawyer
-      ? list.filter((c) => c.lawyer.id === activeLawyer.id)
-      : list;
-    setConsultations(lawyerMatters);
-    let count = 0;
-    lawyerMatters.forEach((c) => {
-      c.messages?.forEach((m) => {
-        if (m.senderRole === "client" && m.status !== "read") count++;
-      });
-    });
-    setUnreadMessages(count);
+    async function loadStats() {
+      try {
+        const { matters: dbMatters, error } = await getUserMatters();
+        if (!error && dbMatters) {
+          setConsultations(dbMatters as any);
+          return;
+        }
+      } catch (e) {}
+
+      const list = getStoredConsultations();
+      const lawyerMatters = activeLawyer
+        ? list.filter((c) => c.lawyer.id === activeLawyer.id)
+        : list;
+      setConsultations(lawyerMatters);
+    }
+    loadStats();
   }, [activeLawyer]);
 
   const attorneyName = activeLawyer?.name || currentUser.name || "Counsel";
@@ -59,9 +69,23 @@ function LawyerDashboardView() {
               Welcome, {attorneyName}
             </h1>
             <div className="text-xs sm:text-sm text-on-surface-variant mt-2 flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-0.5 rounded-full text-[11px] border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Active Roster
-              </span>
+              {isVerified ? (
+                <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-0.5 rounded-full text-[11px] border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Active Roster
+                </span>
+              ) : verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW" ? (
+                <span className="inline-flex items-center gap-1.5 text-amber-800 font-semibold bg-amber-50 px-2.5 py-0.5 rounded-full text-[11px] border border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" /> Verification Pending Approval
+                </span>
+              ) : verificationStatus === "REJECTED" ? (
+                <span className="inline-flex items-center gap-1.5 text-rose-800 font-semibold bg-rose-50 px-2.5 py-0.5 rounded-full text-[11px] border border-rose-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600" /> Verification Needs Attention
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-amber-800 font-semibold bg-amber-50 px-2.5 py-0.5 rounded-full text-[11px] border border-amber-200">
+                  <Lock className="w-3 h-3 text-amber-600" /> Unverified Profile
+                </span>
+              )}
               <span>•</span>
               <span>{jurisdiction}</span>
               <span>•</span>
@@ -70,22 +94,81 @@ function LawyerDashboardView() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <Link
-              href={activeLawyer ? `/lawyers/${activeLawyer.id}` : "/cases"}
-              className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2 min-h-[42px]"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>{activeLawyer ? "View Public Profile" : "Active Matters"}</span>
-            </Link>
+            {!isVerified ? (
+              <button
+                onClick={() => setShowVerificationModal(true)}
+                className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2 min-h-[42px]"
+              >
+                <Lock className="w-4 h-4" />
+                <span>
+                  {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED"
+                    ? "View Verification Status"
+                    : "Apply for Verification"}
+                </span>
+              </button>
+            ) : (
+              <Link
+                href={activeLawyer ? `/lawyers/${activeLawyer.id}` : "/cases"}
+                className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2 min-h-[42px]"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>{activeLawyer ? "View Public Profile" : "Active Matters"}</span>
+              </Link>
+            )}
             <Link
               href="/cases"
               className="border border-hairline hover:bg-surface-container text-primary text-xs font-semibold px-5 py-2.5 rounded-lg btn-editorial-secondary flex items-center gap-2 min-h-[42px]"
             >
               <FolderOpen className="w-3.5 h-3.5 text-brass" />
-              <span>Manage Cases</span>
+              <span>{isVerified ? "Manage Cases" : "Cases (Locked)"}</span>
             </Link>
           </div>
         </div>
+
+        {/* Admissions Verification Notification Banner */}
+        {!isVerified && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-headline font-semibold text-primary text-sm sm:text-base">
+                    {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
+                      ? "Bar Verification Application Under Review"
+                      : verificationStatus === "REJECTED"
+                      ? "Verification Revision Required"
+                      : "Action Required: Apply for Bar Verification & Onboarding"}
+                  </h3>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 border border-amber-500/30">
+                    {verificationStatus}
+                  </span>
+                </div>
+                <p className="text-xs text-on-surface-variant mt-1 max-w-2xl leading-relaxed">
+                  {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
+                    ? "Your bar enrollment certificate and identity credentials have been submitted to the Admissions Desk. Client case dockets and inquiries will unlock upon review."
+                    : verificationStatus === "REJECTED"
+                    ? "Your verification dossier requires updated documents or clarification. Please review admissions feedback and resubmit."
+                    : "To comply with Bar Council regulations and access confidential client case records, you must verify your enrollment credentials with Advocato."}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowVerificationModal(true)}
+              className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2 self-start sm:self-auto shrink-0"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>
+                {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
+                  ? "View Application Status"
+                  : verificationStatus === "REJECTED"
+                  ? "Resubmit Credentials"
+                  : "Apply for Verification"}
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* 3 Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -94,10 +177,13 @@ function LawyerDashboardView() {
               <span className="text-xs font-semibold uppercase tracking-wider">Active Client Cases</span>
               <FolderOpen className="w-4 h-4 text-slate" />
             </div>
-            <div className="font-headline text-2xl sm:text-3xl font-bold text-primary">
-              {consultations.length}
+            <div className="font-headline text-2xl sm:text-3xl font-bold text-primary flex items-center gap-2">
+              <span>{isVerified ? consultations.length : 0}</span>
+              {!isVerified && <Lock className="w-4 h-4 text-amber-600 inline" />}
             </div>
-            <p className="text-[11px] text-on-surface-variant mt-1">Cases currently assigned to you</p>
+            <p className="text-[11px] text-on-surface-variant mt-1">
+              {isVerified ? "Cases currently assigned to you" : "🔒 Verification required to access"}
+            </p>
           </div>
 
           <div className="bg-surface-container-lowest p-5 rounded-xl border border-hairline shadow-xs">
@@ -143,7 +229,30 @@ function LawyerDashboardView() {
             </Link>
           </div>
 
-          {consultations.length === 0 ? (
+          {!isVerified ? (
+            <div className="py-16 px-4 text-center flex flex-col items-center justify-center max-w-lg mx-auto">
+              <div className="w-16 h-16 rounded-2xl bg-surface-container-low border border-hairline flex items-center justify-center text-brass mb-4 shadow-sm">
+                <Lock className="w-8 h-8 text-brass" />
+              </div>
+              <h3 className="font-headline text-lg sm:text-xl font-bold text-primary mb-1">
+                Client Matters &amp; Inquiries Locked
+              </h3>
+              <p className="text-xs text-on-surface-variant leading-relaxed mb-6">
+                Privileged case briefs, client intake submissions, and confidential consultation dockets are locked under State Bar verification standards. Complete your verification to unlock full access.
+              </p>
+              <button
+                onClick={() => setShowVerificationModal(true)}
+                className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-6 py-3 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2"
+              >
+                <Lock className="w-4 h-4" />
+                <span>
+                  {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED"
+                    ? "View Verification Status"
+                    : "Apply for Verification / Onboarding"}
+                </span>
+              </button>
+            </div>
+          ) : consultations.length === 0 ? (
             <div className="py-12 px-4 text-center flex flex-col items-center justify-center max-w-md mx-auto">
               <div className="w-12 h-12 rounded-xl bg-surface-container-low border border-hairline flex items-center justify-center text-brass mb-3 shadow-2xs">
                 <Scale className="w-6 h-6" />
@@ -220,6 +329,11 @@ function LawyerDashboardView() {
           )}
         </div>
       </div>
+
+      <VerificationModal
+        isOpen={showVerificationModal}
+        onClose={() => setShowVerificationModal(false)}
+      />
     </div>
   );
 }

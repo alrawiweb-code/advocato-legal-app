@@ -1,11 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { Lawyer } from "@/types";
-import { getAllLawyers, getLawyerById, registerNewLawyer } from "@/lib/data/lawyers";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { Lawyer, VerificationStatus } from "@/types";
+import { getLawyerById } from "@/lib/data/lawyers";
 import { createClient } from "@/lib/supabase/client";
 
-export type UserRole = "client" | "lawyer";
+export type UserRole = "client" | "lawyer" | "admin";
 
 export interface UserPersona {
   id: string;
@@ -16,14 +16,29 @@ export interface UserPersona {
   lawyerId?: string;
   barNumber?: string;
   jurisdiction?: string;
+  isVerified?: boolean;
+  verificationStatus?: VerificationStatus;
 }
 
+export function getInitialsAvatar(name: string): string {
+  const initials = (name || "User")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "US";
+  return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231a2634"/><text x="50" y="55" font-family="system-ui,-apple-system,sans-serif" font-size="38" font-weight="700" fill="%23c5a059" text-anchor="middle" dominant-baseline="middle">${initials}</text></svg>`;
+}
+
+// Deprecated stubs for backward compatibility
 export const DEMO_CLIENT: UserPersona = {
   id: "client-alex-mercer",
   name: "Alex Mercer",
   email: "alex.mercer@company.com",
   role: "client",
-  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400",
+  avatar: getInitialsAvatar("Alex Mercer"),
 };
 
 export const DEMO_LAWYER_SARAH: UserPersona = {
@@ -31,7 +46,7 @@ export const DEMO_LAWYER_SARAH: UserPersona = {
   name: "Sarah Jenkins, Adv.",
   email: "sarah.jenkins@jenkinslaw.com",
   role: "lawyer",
-  avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=400",
+  avatar: getInitialsAvatar("Sarah Jenkins"),
   lawyerId: "1",
   barNumber: "D/4921/2012",
   jurisdiction: "Delhi (DL)",
@@ -42,17 +57,13 @@ export const DEMO_LAWYER_MARCUS: UserPersona = {
   name: "Marcus Vance, Adv.",
   email: "marcus.vance@vancelegal.com",
   role: "lawyer",
-  avatar: "https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400",
+  avatar: getInitialsAvatar("Marcus Vance"),
   lawyerId: "2",
   barNumber: "MAH/8291/2008",
   jurisdiction: "Maharashtra (MH)",
 };
 
-export const DEMO_ACCOUNTS = [
-  DEMO_CLIENT,
-  DEMO_LAWYER_SARAH,
-  DEMO_LAWYER_MARCUS,
-];
+export const DEMO_ACCOUNTS = [DEMO_CLIENT, DEMO_LAWYER_SARAH, DEMO_LAWYER_MARCUS];
 
 interface LoginCredentials {
   email?: string;
@@ -86,285 +97,205 @@ interface RoleContextType {
     bio: string;
     password?: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  // Deprecated developer helpers kept for safe backward compatibility
   setRole: (role: UserRole) => void;
   toggleRole: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
-
-const AUTH_SESSION_KEY = "advocato_auth_session";
-const ACTIVE_LAWYER_KEY = "advocato_active_lawyer_id";
-const MY_LAWYER_PROFILE_KEY = "advocato_my_lawyer_profile";
-const DATA_PURGE_VERSION_KEY = "advocato_data_version";
-const CURRENT_DATA_VERSION = "v6_indian_states_pricing";
-
-export function purgeAllDummyData(): void {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("advocato_latest_intake");
-    localStorage.removeItem("advocato_intake_data");
-    localStorage.removeItem("advocato_consultations");
-    localStorage.removeItem("advocato_registered_lawyers");
-    localStorage.setItem(DATA_PURGE_VERSION_KEY, CURRENT_DATA_VERSION);
-  }
-}
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [sessionUser, setSessionUser] = useState<UserPersona | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [activeLawyerId, setActiveLawyerIdState] = useState<string | null>(null);
   const [myLawyerProfile, setMyLawyerProfileState] = useState<Lawyer | null>(null);
-  const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
 
-  useEffect(() => {
-    // 0. Automatic purge of stale dummy data / mock cases
-    if (typeof window !== "undefined") {
-      try {
-        const storedVersion = localStorage.getItem(DATA_PURGE_VERSION_KEY);
-        if (storedVersion !== CURRENT_DATA_VERSION) {
-          purgeAllDummyData();
-        }
-      } catch (e) {
-        console.error("Failed to run storage purge", e);
-      }
-    }
+  const supabase = createClient();
+  const isSupabaseConnected = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 
-    const supabase = createClient();
-    const hasConfig = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-    setIsSupabaseConnected(hasConfig);
+  const hydrateUserProfile = useCallback(async (userId: string, email: string, userMeta?: any) => {
+    try {
+      // 1. Fetch public profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
 
-    // Hydrate session from localStorage
-    if (typeof window !== "undefined") {
-      try {
-        const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
-        if (savedSession) {
-          const parsed: UserPersona = JSON.parse(savedSession);
-          setSessionUser(parsed);
-          if (parsed.lawyerId) {
-            setActiveLawyerIdState(parsed.lawyerId);
-          }
-        }
+      const userRole: UserRole =
+        (profile?.role as UserRole) ||
+        (userMeta?.role as UserRole) ||
+        "client";
 
-        const savedLawyerId = localStorage.getItem(ACTIVE_LAWYER_KEY);
-        if (savedLawyerId) {
-          setActiveLawyerIdState(savedLawyerId);
-        }
+      const fullName =
+        profile?.full_name ||
+        userMeta?.full_name ||
+        email.split("@")[0] ||
+        "User";
 
-        const savedProfile = localStorage.getItem(MY_LAWYER_PROFILE_KEY);
-        if (savedProfile) {
-          setMyLawyerProfileState(JSON.parse(savedProfile));
-        }
-      } catch (e) {
-        console.error("Failed to restore session from storage", e);
-      } finally {
-        setIsLoadingAuth(false);
-      }
-    }
+      let lawyerDetails: any = null;
+      let isLawyerVerified = false;
+      let lawyerVerificationStatus: VerificationStatus = "NOT_VERIFIED";
 
-    if (hasConfig) {
-      // Sync Supabase Auth state if user signs in with Supabase directly
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
-          const userMeta = session.user.user_metadata;
-          const userRole = (userMeta?.role as UserRole) || "client";
-          const userObj: UserPersona = {
-            id: session.user.id,
-            name: userMeta?.full_name || session.user.email?.split("@")[0] || "User",
-            email: session.user.email || "",
-            role: userRole,
-            avatar: userMeta?.avatar_url || (userRole === "client" ? DEMO_CLIENT.avatar : DEMO_LAWYER_SARAH.avatar),
-            lawyerId: userMeta?.lawyer_id,
-            barNumber: userMeta?.bar_number,
-            jurisdiction: userMeta?.jurisdiction,
+      if (userRole === "lawyer") {
+        const { data: lp } = await supabase
+          .from("lawyer_profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+        lawyerDetails = lp;
+
+        if (lp) {
+          isLawyerVerified = Boolean(lp.is_verified);
+          lawyerVerificationStatus = (lp.verification_status as VerificationStatus) || (isLawyerVerified ? "VERIFIED" : "NOT_VERIFIED");
+
+          const lawyerModel: Lawyer = {
+            id: userId,
+            name: fullName,
+            title: lp.title || "Advocate",
+            headline: lp.headline || `${lp.practice_areas?.[0] || "General"} Specialist`,
+            yearsExperience: lp.years_experience || 5,
+            hourlyRate: lp.hourly_rate || 2500,
+            isVerified: isLawyerVerified,
+            verificationStatus: lawyerVerificationStatus,
+            availability: (lp.availability as any) || "Available today",
+            jurisdiction: lp.jurisdiction || lp.state_bar || "Delhi (DL)",
+            state: lp.state || lp.state_bar || lp.jurisdiction || "Delhi (DL)",
+            city: lp.city || undefined,
+            languages: lp.languages || ["English", "Hindi"],
+            practiceAreas: lp.practice_areas || ["General Legal Counsel"],
+            tags: lp.tags || [],
+            avatar: profile?.avatar_url || getInitialsAvatar(fullName),
+            bio: lp.bio || "",
+            notableCases: lp.notable_cases || [],
+            rating: Number(lp.rating) || 5.0,
+            reviewCount: lp.review_count || 0,
           };
-          setSessionUser(userObj);
-          if (userObj.lawyerId) {
-            setActiveLawyerIdState(userObj.lawyerId);
-          }
-          if (typeof window !== "undefined") {
-            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(userObj));
-          }
+          setMyLawyerProfileState(lawyerModel);
+          setActiveLawyerIdState(userId);
         }
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    }
-  }, []);
-
-  // Sync session state to a cookie so Server Components/APIs know we're authenticated (for demo accounts)
-  useEffect(() => {
-    if (typeof document !== "undefined" && !isLoadingAuth) {
-      if (sessionUser) {
-        document.cookie = "advocato_demo_auth=true; path=/; max-age=604800;";
-      } else {
-        document.cookie = "advocato_demo_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;";
       }
+
+      const persona: UserPersona = {
+        id: userId,
+        name: fullName,
+        email: email,
+        role: userRole,
+        avatar: profile?.avatar_url || getInitialsAvatar(fullName),
+        lawyerId: userRole === "lawyer" ? userId : undefined,
+        barNumber: lawyerDetails?.bar_number || userMeta?.bar_number,
+        jurisdiction: lawyerDetails?.jurisdiction || userMeta?.jurisdiction,
+        isVerified: userRole === "lawyer" ? isLawyerVerified : true,
+        verificationStatus: userRole === "lawyer" ? lawyerVerificationStatus : "VERIFIED",
+      };
+
+      setSessionUser(persona);
+      if (persona.lawyerId) {
+        setActiveLawyerIdState(persona.lawyerId);
+      }
+    } catch (err) {
+      console.error("Error hydrating profile from Supabase:", err);
     }
-  }, [sessionUser, isLoadingAuth]);
+  }, [supabase]);
+
+  const refreshUser = useCallback(async () => {
+    setIsLoadingAuth(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await hydrateUserProfile(user.id, user.email || "", user.user_metadata);
+      } else {
+        setSessionUser(null);
+        setActiveLawyerIdState(null);
+        setMyLawyerProfileState(null);
+      }
+    } catch (e) {
+      console.error("Auth hydration error:", e);
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  }, [supabase, hydrateUserProfile]);
+
+  useEffect(() => {
+    refreshUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await hydrateUserProfile(
+          session.user.id,
+          session.user.email || "",
+          session.user.user_metadata
+        );
+      } else {
+        setSessionUser(null);
+        setActiveLawyerIdState(null);
+        setMyLawyerProfileState(null);
+      }
+      setIsLoadingAuth(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase, hydrateUserProfile, refreshUser]);
 
   const login = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string }> => {
     try {
-      // 1. Direct Demo Persona Login
-      if (credentials.personaId) {
-        const found = DEMO_ACCOUNTS.find((d) => d.id === credentials.personaId);
-        if (found) {
-          setSessionUser(found);
-          if (found.lawyerId) {
-            setActiveLawyerIdState(found.lawyerId);
-          }
-          if (typeof window !== "undefined") {
-            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(found));
-          }
-          return { success: true };
-        }
+      if (!credentials.email || !credentials.password) {
+        return { success: false, error: "Please provide both email and password." };
       }
 
-      // 2. Matching by Email in Demo Accounts
-      if (credentials.email) {
-        const emailLower = credentials.email.toLowerCase().trim();
-        const demoMatch = DEMO_ACCOUNTS.find((d) => d.email.toLowerCase() === emailLower);
-        if (demoMatch) {
-          setSessionUser(demoMatch);
-          if (demoMatch.lawyerId) {
-            setActiveLawyerIdState(demoMatch.lawyerId);
-          }
-          if (typeof window !== "undefined") {
-            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(demoMatch));
-          }
-          return { success: true };
-        }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email.trim(),
+        password: credentials.password,
+      });
 
-        // Check registered lawyers roster
-        const allLawyers = getAllLawyers();
-        const lawyerMatch = allLawyers.find((l) =>
-          l.name.toLowerCase().includes(emailLower.split("@")[0].toLowerCase()) ||
-          l.id === credentials.lawyerId
-        );
+      if (error) {
+        return { success: false, error: error.message };
+      }
 
-        if (credentials.role === "lawyer" && lawyerMatch) {
-          const lawyerUser: UserPersona = {
-            id: lawyerMatch.id,
-            name: lawyerMatch.name,
-            email: credentials.email,
-            role: "lawyer",
-            avatar: lawyerMatch.avatar,
-            lawyerId: lawyerMatch.id,
-            jurisdiction: lawyerMatch.jurisdiction,
-          };
-          setSessionUser(lawyerUser);
-          setActiveLawyerIdState(lawyerMatch.id);
-          if (typeof window !== "undefined") {
-            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(lawyerUser));
-          }
-          return { success: true };
-        }
-
-        // 3. Supabase Auth Sign In (if credentials supplied and Supabase connected)
-        if (isSupabaseConnected && credentials.password) {
-          const supabase = createClient();
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: credentials.email,
-            password: credentials.password,
-          });
-
-          if (!error && data?.user) {
-            const userMeta = data.user.user_metadata;
-            const userRole = (userMeta?.role as UserRole) || credentials.role || "client";
-            const userObj: UserPersona = {
-              id: data.user.id,
-              name: userMeta?.full_name || data.user.email?.split("@")[0] || "User",
-              email: data.user.email || "",
-              role: userRole,
-              avatar: userMeta?.avatar_url || (userRole === "client" ? DEMO_CLIENT.avatar : DEMO_LAWYER_SARAH.avatar),
-              lawyerId: userMeta?.lawyer_id || credentials.lawyerId,
-            };
-            setSessionUser(userObj);
-            if (typeof window !== "undefined") {
-              localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(userObj));
-            }
-            return { success: true };
-          }
-        }
-
-        // 4. Fallback Generic User Sign-In (Creates session for evaluated custom email)
-        const role = credentials.role || (credentials.lawyerId ? "lawyer" : "client");
-        const defaultName = credentials.email.split("@")[0]
-          .replace(/[._]/g, " ")
-          .replace(/\b\w/g, (c) => c.toUpperCase());
-        
-        const fallbackUser: UserPersona = {
-          id: `user-${Date.now()}`,
-          name: defaultName || "Client User",
-          email: credentials.email,
-          role: role,
-          avatar: role === "client" ? DEMO_CLIENT.avatar : DEMO_LAWYER_SARAH.avatar,
-          lawyerId: credentials.lawyerId || (role === "lawyer" ? "1" : undefined),
-        };
-
-        setSessionUser(fallbackUser);
-        if (fallbackUser.lawyerId) {
-          setActiveLawyerIdState(fallbackUser.lawyerId);
-        }
-        if (typeof window !== "undefined") {
-          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(fallbackUser));
-        }
+      if (data?.user) {
+        await hydrateUserProfile(data.user.id, data.user.email || "", data.user.user_metadata);
         return { success: true };
       }
 
-      return { success: false, error: "Please provide valid credentials" };
+      return { success: false, error: "Failed to establish authenticated session." };
     } catch (err: any) {
       return { success: false, error: err.message || "Authentication failed" };
     }
   };
 
-  const logout = async (): Promise<void> => {
-    try {
-      if (isSupabaseConnected) {
-        const supabase = createClient();
-        await supabase.auth.signOut();
-      }
-    } catch (e) {
-      console.warn("Supabase sign out error:", e);
-    } finally {
-      setSessionUser(null);
-      setActiveLawyerIdState(null);
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(AUTH_SESSION_KEY);
-        localStorage.removeItem(ACTIVE_LAWYER_KEY);
-      }
-    }
-  };
-
   const registerClient = async (data: { name: string; email: string; password?: string }) => {
     try {
-      if (isSupabaseConnected && data.password) {
-        const supabase = createClient();
-        await supabase.auth.signUp({
-          email: data.email,
-          password: data.password,
-          options: {
-            data: {
-              full_name: data.name,
-              role: "client",
-            },
+      if (!data.password) {
+        return { success: false, error: "A secure password is required to create an account." };
+      }
+
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email.trim(),
+        password: data.password,
+        options: {
+          data: {
+            full_name: data.name.trim(),
+            role: "client",
           },
+        },
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      if (authData?.user) {
+        await hydrateUserProfile(authData.user.id, authData.user.email || data.email, {
+          full_name: data.name,
+          role: "client",
         });
+        return { success: true };
       }
 
-      const clientUser: UserPersona = {
-        id: `client-${Date.now()}`,
-        name: data.name,
-        email: data.email,
-        role: "client",
-        avatar: DEMO_CLIENT.avatar,
-      };
-
-      setSessionUser(clientUser);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(clientUser));
-      }
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || "Registration failed" };
@@ -382,118 +313,89 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     password?: string;
   }) => {
     try {
-      if (isSupabaseConnected && data.password) {
-        const supabase = createClient();
-        
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: data.email,
-          password: data.password,
-          options: {
-            data: {
-              full_name: data.name,
-              role: "lawyer",
-              bar_number: data.barNumber,
-              jurisdiction: data.stateBar,
-            },
-          },
-        });
-        
-        if (authError) throw authError;
-        
-        const userId = authData.user?.id;
-        if (!userId) throw new Error("User creation failed");
-        
-        // Attempt to insert into lawyer_profiles (requires RLS policy to allow insert if auth.uid() == id)
-        await supabase.from("lawyer_profiles").insert({
-          id: userId,
-          title: "Advocate",
-          headline: "New Lawyer",
-          bio: data.bio,
-          hourly_rate: Number(data.hourlyRate),
-          is_verified: false,
-          verification_status: "PENDING",
-          jurisdiction: data.stateBar,
-          practice_areas: [data.primaryPractice],
-        });
-
-        const lawyerUser: UserPersona = {
-          id: userId,
-          name: data.name,
-          email: data.email,
-          role: "lawyer",
-          avatar: DEMO_LAWYER_SARAH.avatar,
-          lawyerId: userId,
-          barNumber: data.barNumber,
-          jurisdiction: data.stateBar,
-        };
-
-        setSessionUser(lawyerUser);
-        setActiveLawyerIdState(userId);
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(lawyerUser));
-          localStorage.setItem(ACTIVE_LAWYER_KEY, userId);
-        }
-        return { success: true };
-      } else {
-        // Fallback to local mock data mutation
-        const newLawyer = registerNewLawyer({
-          fullName: data.name,
-          email: data.email,
-          barNumber: data.barNumber,
-          stateBar: data.stateBar,
-          primaryPractice: data.primaryPractice,
-          hourlyRate: data.hourlyRate,
-          yearsExperience: 10,
-          bio: data.bio,
-        });
-
-        const lawyerUser: UserPersona = {
-          id: newLawyer.id,
-          name: newLawyer.name,
-          email: data.email,
-          role: "lawyer",
-          avatar: newLawyer.avatar,
-          lawyerId: newLawyer.id,
-          barNumber: data.barNumber,
-          jurisdiction: data.stateBar,
-        };
-
-        setSessionUser(lawyerUser);
-        setActiveLawyerIdState(newLawyer.id);
-        setMyLawyerProfileState(newLawyer);
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(lawyerUser));
-          localStorage.setItem(ACTIVE_LAWYER_KEY, newLawyer.id);
-          localStorage.setItem(MY_LAWYER_PROFILE_KEY, JSON.stringify(newLawyer));
-        }
-        return { success: true };
+      if (!data.password) {
+        return { success: false, error: "A password is required for attorney registration." };
       }
+
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: data.email.trim(),
+        password: data.password,
+        options: {
+          data: {
+            full_name: data.name.trim(),
+            role: "lawyer",
+            bar_number: data.barNumber.trim(),
+            jurisdiction: data.stateBar,
+          },
+        },
+      });
+
+      if (authError) {
+        return { success: false, error: authError.message };
+      }
+
+      const userId = authData.user?.id;
+      if (!userId) {
+        return { success: false, error: "Attorney account creation failed." };
+      }
+
+      // Upsert into lawyer_profiles
+      const { error: profileError } = await supabase.from("lawyer_profiles").upsert({
+        id: userId,
+        title: "Advocate",
+        headline: `${data.primaryPractice} Specialist`,
+        bar_number: data.barNumber.trim(),
+        state_bar: data.stateBar,
+        years_experience: 5,
+        hourly_rate: Number(data.hourlyRate) || 2500,
+        is_verified: false,
+        verification_status: "NOT_VERIFIED",
+        availability: "Available today",
+        jurisdiction: data.stateBar,
+        state: data.stateBar,
+        practice_areas: [data.primaryPractice],
+        bio: data.bio.trim() || `Licensed attorney admitted to the Bar Council of ${data.stateBar}.`,
+        rating: 5.0,
+        review_count: 0,
+      });
+
+      if (profileError) {
+        console.warn("Lawyer profile upsert notice:", profileError.message);
+      }
+
+      await hydrateUserProfile(userId, data.email, {
+        full_name: data.name,
+        role: "lawyer",
+        bar_number: data.barNumber,
+        jurisdiction: data.stateBar,
+      });
+
+      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || "Lawyer registration failed" };
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("Supabase sign out warning:", e);
+    } finally {
+      setSessionUser(null);
+      setActiveLawyerIdState(null);
+      setMyLawyerProfileState(null);
     }
   };
 
   const setMyLawyerProfile = (lawyer: Lawyer) => {
     setMyLawyerProfileState(lawyer);
     setActiveLawyerIdState(lawyer.id);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem(MY_LAWYER_PROFILE_KEY, JSON.stringify(lawyer));
-        localStorage.setItem(ACTIVE_LAWYER_KEY, lawyer.id);
-      } catch (e) {}
-    }
   };
 
-  // Deprecated developer helpers kept for safe backward compatibility
   const setRole = (newRole: UserRole) => {
     if (sessionUser) {
-      const updated = { ...sessionUser, role: newRole };
-      setSessionUser(updated);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updated));
-      }
+      setSessionUser({ ...sessionUser, role: newRole });
     }
   };
 
@@ -506,17 +408,16 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = sessionUser !== null;
   const role: UserRole = sessionUser?.role || "client";
   const activeLawyer =
-    (activeLawyerId ? getLawyerById(activeLawyerId) : null) ||
     myLawyerProfile ||
+    (activeLawyerId ? getLawyerById(activeLawyerId) : null) ||
     (role === "lawyer" ? getLawyerById("1") || null : null);
 
-  // Fallback currentUser presentation
   const currentUser: UserPersona = sessionUser || {
     id: "guest",
     name: "Guest",
     email: "guest@advocato.legal",
     role: "client",
-    avatar: DEMO_CLIENT.avatar,
+    avatar: getInitialsAvatar("Guest User"),
   };
   const currentUserId = currentUser.id;
 
@@ -539,6 +440,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         registerLawyer,
         setRole,
         toggleRole,
+        refreshUser,
       }}
     >
       {children}

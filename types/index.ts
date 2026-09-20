@@ -13,8 +13,13 @@ export type VerificationStatus =
   | "NOT_VERIFIED"
   | "PENDING"
   | "VERIFIED"
+  | "APPROVED"
   | "SUSPENDED"
-  | "REJECTED";
+  | "REJECTED"
+  | "DRAFT"
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "DOCUMENTS_REQUIRED";
 
 // ============================================================
 // PRACTICE AREAS & SERVICES (Phase 2 — Normalized Taxonomy)

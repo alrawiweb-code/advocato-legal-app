@@ -149,15 +149,15 @@ export default function LawyerRegistrationPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-surface-container-low border border-hairline text-xs font-semibold text-primary">
-                <ShieldCheck className="w-3.5 h-3.5 text-brass" />
-                <span>Verified in Lawyer Directory</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                <span>Verification Onboarding Required</span>
               </div>
               <h2 className="font-headline text-2xl sm:text-3xl font-semibold text-primary">
-                Profile Created!
+                Profile Registered!
               </h2>
               <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-                Thank you, <strong>{formData.fullName}</strong>. Your profile is now live in Advocato's directory. When clients submit cases matching <strong>{formData.primaryPractice}</strong> in <strong>{formData.stateBar}</strong>, they will be matched with you.
+                Thank you, <strong>{formData.fullName}</strong>. Your profile has been drafted. To unlock client cases, privileged briefs, and client matching, please submit your Bar Council verification credentials.
               </p>
             </div>
 
@@ -176,27 +176,27 @@ export default function LawyerRegistrationPage() {
                 <span className="font-semibold text-primary">{formData.stateBar} ({formData.barNumber})</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
-                <span>Status</span>
-                <span className="font-semibold text-emerald-700 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                  Active
+                <span>Verification Status</span>
+                <span className="font-semibold text-amber-700 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                  Apply for Verification
                 </span>
               </div>
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-3">
               <Link
-                href={registeredLawyer ? `/lawyers/${registeredLawyer.id}` : "/lawyers"}
+                href="/lawyer/verify"
                 className="flex-1 bg-brass hover:bg-brass-hover text-white py-3 px-4 rounded-lg text-xs font-semibold shadow-sm transition-all text-center flex items-center justify-center gap-1.5 min-h-[44px]"
               >
-                <span>View Live Profile</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ShieldCheck className="w-4 h-4" />
+                <span>Submit Verification Documents</span>
               </Link>
               <Link
-                href="/intake"
+                href="/"
                 className="flex-1 bg-transparent border border-primary text-primary hover:bg-surface-container-low py-3 px-4 rounded-lg text-xs font-semibold transition-colors text-center flex items-center justify-center min-h-[44px]"
               >
-                Test Case Intake
+                Go to Dashboard
               </Link>
             </div>
 

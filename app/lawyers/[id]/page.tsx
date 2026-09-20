@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { getOrCreateConsultationForLawyer } from "@/lib/data/consultations";
+import { createOrGetMatter } from "@/lib/supabase/matters";
 import { Lawyer, IntakeAssessment, LawyerReview } from "@/types";
 import { useUserRole } from "@/lib/context/RoleContext";
 import StarRating from "@/components/marketplace/StarRating";
@@ -133,8 +134,28 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     }
   };
 
-  const confirmBooking = () => {
+  const confirmBooking = async () => {
     if (!lawyer) return;
+
+    try {
+      const { matter, error } = await createOrGetMatter({
+        lawyerId: lawyer.id,
+        caseTitle: intakeData?.caseTitle || `Consultation with ${lawyer.name}`,
+        category: intakeData?.category || lawyer.practiceAreas?.[0] || "General Legal Counsel",
+        jurisdiction: intakeData?.jurisdiction || lawyer.jurisdiction || "Delhi (DL)",
+        urgency: intakeData?.urgency || "Medium",
+        appointmentDate: selectedDate,
+      });
+
+      if (matter) {
+        setShowBookingModal(false);
+        router.push(`/messages?matterId=${matter.id}`);
+        return;
+      }
+    } catch (e) {
+      console.warn("Matter creation error, using consultation fallback:", e);
+    }
+
     const consultation = getOrCreateConsultationForLawyer({
       lawyerId: lawyer.id,
       clientName: currentUser.name,

@@ -2,67 +2,69 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { FolderOpen, ArrowRight, ShieldCheck, Clock, Plus, Scale, RefreshCw, UserCheck } from "lucide-react";
+import { FolderOpen, ArrowRight, ShieldCheck, Clock, Plus, Scale, RefreshCw, Lock } from "lucide-react";
 import { getStoredConsultations } from "@/lib/data/consultations";
 import { Consultation } from "@/types";
-import { useUserRole } from "@/lib/context/RoleContext";
-import { createClient } from "@/lib/supabase/client";
+import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
+import { getUserMatters } from "@/lib/supabase/matters";
+import { VerificationModal } from "@/components/lawyer/VerificationModal";
 
 export default function CasesPage() {
   const { role, activeLawyer, currentUser } = useUserRole();
   const [matters, setMatters] = useState<Consultation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+
+  const isLawyerVerified = Boolean(activeLawyer?.isVerified ?? currentUser.isVerified);
+  const verificationStatus = activeLawyer?.verificationStatus || currentUser.verificationStatus || "NOT_VERIFIED";
 
   useEffect(() => {
     async function loadMatters() {
       setIsLoading(true);
       try {
-        const supabase = createClient();
-        const { data: dbMatters, error } = await supabase
-          .from("matters")
-          .select("*, lawyer:lawyer_profiles(*)")
-          .order("created_at", { ascending: false });
+        const { matters: dbMatters, error } = await getUserMatters();
 
         if (!error && dbMatters && dbMatters.length > 0) {
-          // Transform Supabase records to Consultation format
-          const mapped: Consultation[] = dbMatters.map((m: any) => ({
-            id: m.id,
-            lawyer: {
-              id: m.lawyer?.id || m.lawyer_id,
-              name: m.lawyer?.full_name || "Assigned Counsel",
-              title: m.lawyer?.headline || `${m.category} Attorney`,
-              avatar: m.lawyer?.avatar_url || "https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400",
-              rating: 5.0,
-              reviewCount: 0,
-              hourlyRate: m.lawyer?.hourly_rate_usd || 3500,
-              isVerified: true,
-              availability: "Available today",
-              yearsExperience: m.lawyer?.years_experience || 10,
-              jurisdiction: m.jurisdiction || "Bar Council Licensed",
-              tags: [m.category],
-              practiceAreas: [m.category],
-              bio: m.lawyer?.bio || "Licensed counsel managing active matter.",
-              notableCases: [],
-            },
-            status: m.status || "active",
-            caseTitle: m.case_title,
-            matterNumber: m.matter_number,
-            clientName: currentUser.name,
-            lastActive: "online",
-            messages: [],
-          }));
-          const filtered = (role === "lawyer" && activeLawyer)
-            ? mapped.filter((m) => m.lawyer.id === activeLawyer.id)
-            : mapped;
-          setMatters(filtered);
+          const mapped: Consultation[] = dbMatters.map((m) => {
+            const isLawyerRole = role === "lawyer";
+            const counselorName = m.lawyer?.full_name || "Assigned Counsel";
+            return {
+              id: m.id,
+              lawyer: {
+                id: m.lawyer?.id || m.lawyer_id,
+                name: counselorName,
+                title: `${m.category} Attorney`,
+                avatar: m.lawyer?.avatar_url || getInitialsAvatar(counselorName),
+                rating: 5.0,
+                reviewCount: 1,
+                hourlyRate: 2500,
+                isVerified: true,
+                availability: "Available today",
+                yearsExperience: 5,
+                jurisdiction: m.jurisdiction || "Delhi (DL)",
+                tags: [m.category],
+                practiceAreas: [m.category],
+                bio: "Licensed counsel managing active matter.",
+                notableCases: [],
+              },
+              status: (m.status as any) || "active",
+              caseTitle: m.case_title,
+              matterNumber: m.matter_number,
+              clientName: m.client?.full_name || currentUser.name,
+              lastActive: "Active today",
+              messages: [],
+            };
+          });
+
+          setMatters(mapped);
           setIsLoading(false);
           return;
         }
       } catch (err) {
-        console.warn("Supabase matters load fallback:", err);
+        console.warn("Supabase matters load notice:", err);
       }
 
-      // Fallback to local stored consultations
+      // Fallback to local stored consultations for legacy/offline state
       const local = getStoredConsultations();
       const filteredLocal = (role === "lawyer" && activeLawyer)
         ? local.filter((m) => m.lawyer.id === activeLawyer.id)
@@ -84,80 +86,102 @@ export default function CasesPage() {
               <FolderOpen className="w-3.5 h-3.5 text-brass" />
               <span>{role === "lawyer" ? "Attorney Dashboard" : "My Cases"}</span>
             </div>
-            <h1 className="font-headline text-2xl sm:text-3xl font-semibold text-primary">
-              {role === "lawyer" ? "Client Cases" : "My Cases"}
+            <h1 className="font-headline text-2xl sm:text-4xl text-primary font-semibold tracking-tight">
+              {role === "lawyer" ? "Client Cases & Dockets" : "My Active Legal Matters"}
             </h1>
-            <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
+            <p className="text-xs sm:text-sm text-on-surface-variant mt-1.5 max-w-xl leading-relaxed">
               {role === "lawyer"
-                ? "Review client submissions, schedule calls, and message your clients directly."
-                : "Track your ongoing cases, consult with your lawyer, and view shared documents."}
+                ? "Manage your active representation matters, client privileged briefs, and hearing dates."
+                : "Confidential case dockets with your assigned verified attorneys."}
             </p>
           </div>
 
-          {role === "lawyer" ? (
+          {role === "client" ? (
             <Link
-              href={activeLawyer ? `/lawyers/${activeLawyer.id}` : "/lawyer/register"}
-              className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm flex items-center gap-1.5 self-start sm:self-auto transition-colors min-h-[44px]"
+              href="/intake"
+              className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-3 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center justify-center gap-2 self-start sm:self-auto min-h-[44px]"
             >
-              <UserCheck className="w-4 h-4" />
-              <span>{activeLawyer ? "View Public Profile" : "Register Profile"}</span>
+              <Plus className="w-4 h-4" />
+              <span>Start New Consultation</span>
             </Link>
           ) : (
             <Link
-              href="/intake"
-              className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm flex items-center gap-1.5 self-start sm:self-auto transition-colors min-h-[44px]"
+              href="/lawyers"
+              className="border border-hairline hover:bg-surface-container text-primary text-xs font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 self-start sm:self-auto min-h-[44px]"
             >
-              <Plus className="w-4 h-4" />
-              <span>Start New Case</span>
+              <Scale className="w-4 h-4 text-brass" />
+              <span>Browse Legal Marketplace</span>
             </Link>
           )}
         </div>
 
-        {/* Matters List or Zero-State */}
-        {isLoading ? (
-          <div className="py-16 text-center text-xs text-on-surface-variant">
-            Loading your cases...
+        {/* Content */}
+        {role === "lawyer" && !isLawyerVerified ? (
+          <div className="bg-surface-container-lowest rounded-2xl border border-hairline p-8 sm:p-12 text-center max-w-lg mx-auto shadow-xs">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-600 mb-4 shadow-2xs">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold mb-3">
+              <Lock className="w-3.5 h-3.5 text-amber-600" />
+              <span>Bar Verification Required</span>
+            </div>
+            <h2 className="font-headline text-xl sm:text-2xl font-bold text-primary mb-2">
+              Privileged Case Dockets Locked
+            </h2>
+            <p className="text-xs sm:text-sm text-on-surface-variant mb-6 leading-relaxed">
+              Under Bar Council standards and attorney confidentiality compliance, access to client matters, litigation briefs, and privileged documents is restricted until your credentials are verified.
+            </p>
+            <button
+              onClick={() => setShowVerificationModal(true)}
+              className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-6 py-3 rounded-lg inline-flex items-center gap-2 shadow-xs hover:shadow-md btn-editorial-brass"
+            >
+              <Lock className="w-4 h-4" />
+              <span>
+                {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED"
+                  ? "View Verification Status"
+                  : "Apply for Verification / Onboarding"}
+              </span>
+            </button>
+            <VerificationModal
+              isOpen={showVerificationModal}
+              onClose={() => setShowVerificationModal(false)}
+            />
+          </div>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center py-20 text-on-surface-variant">
+            <RefreshCw className="w-6 h-6 animate-spin text-brass mr-3" />
+            <span className="text-sm font-medium">Loading confidential case dockets...</span>
           </div>
         ) : matters.length === 0 ? (
-          <div className="bg-surface-container-lowest rounded-2xl border border-hairline p-8 sm:p-12 text-center shadow-xs flex flex-col items-center justify-center max-w-xl mx-auto my-6 sm:my-10">
-            <div className="w-14 h-14 rounded-2xl bg-surface-container-low border border-hairline flex items-center justify-center text-brass mb-4 shadow-2xs">
-              <Scale className="w-7 h-7" />
+          <div className="bg-surface-container-lowest rounded-2xl border border-hairline p-8 sm:p-12 text-center max-w-lg mx-auto shadow-xs">
+            <div className="w-14 h-14 rounded-2xl bg-surface-container-low border border-hairline flex items-center justify-center mx-auto text-brass mb-4 shadow-2xs">
+              <FolderOpen className="w-7 h-7" />
             </div>
             <h2 className="font-headline text-lg sm:text-xl font-semibold text-primary mb-2">
-              {role === "lawyer" ? "No Client Cases Yet" : "No Active Cases Yet"}
+              {role === "lawyer" ? "No Client Inquiries Assigned Yet" : "No Active Legal Cases Yet"}
             </h2>
-            <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed mb-6 max-w-md">
+            <p className="text-xs sm:text-sm text-on-surface-variant mb-6 leading-relaxed">
               {role === "lawyer"
-                ? "You don't have any client cases right now. When a client submits an intake matching your practice area or messages you, their case will appear here."
-                : "Tell us what happened to get connected with a verified lawyer licensed in your state."}
+                ? "When clients choose your chambers or book consultations from the directory, their confidential case records will populate here."
+                : "You have not started any legal matters yet. Use our 2-minute evaluation to explain what happened and get matched with top licensed counsel."}
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              {role === "lawyer" ? (
-                <Link
-                  href={activeLawyer ? `/lawyers/${activeLawyer.id}` : "/profile"}
-                  className="bg-primary hover:bg-slate-dark text-white font-semibold text-xs px-6 py-3 rounded-lg flex items-center justify-center gap-2 shadow-sm hover:shadow-md btn-editorial min-h-[44px]"
-                >
-                  <UserCheck className="w-4 h-4 text-brass" />
-                  <span>View My Profile &amp; Practice Details</span>
-                </Link>
-              ) : (
-                <>
-                  <Link
-                    href="/intake"
-                    className="bg-primary hover:bg-slate-dark text-white font-semibold text-xs px-6 py-3 rounded-lg flex items-center justify-center gap-2 shadow-sm hover:shadow-md btn-editorial min-h-[44px]"
-                  >
-                    <span>Tell Us What Happened</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                  <Link
-                    href="/lawyers"
-                    className="border border-hairline hover:bg-surface-container text-primary font-semibold text-xs px-6 py-3 rounded-lg flex items-center justify-center btn-editorial-secondary min-h-[44px]"
-                  >
-                    <span>Browse All Lawyers</span>
-                  </Link>
-                </>
-              )}
-            </div>
+            {role === "client" ? (
+              <Link
+                href="/intake"
+                className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-6 py-3 rounded-lg inline-flex items-center gap-2 shadow-xs transition-colors"
+              >
+                <span>Explain Your Legal Issue</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <Link
+                href={`/lawyers/${activeLawyer?.id || "1"}`}
+                className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-6 py-3 rounded-lg inline-flex items-center gap-2 shadow-xs transition-colors"
+              >
+                <span>View Public Profile</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
           </div>
         ) : (
           <div className="space-y-4 sm:space-y-5">
@@ -192,22 +216,16 @@ export default function CasesPage() {
                             v. {matter.opposingParty}
                           </span>
                         )}
-                        {matter.appointmentDate && (
-                          <span className="text-[10px] md:text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                            {matter.appointmentDate}
-                          </span>
-                        )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs md:text-sm text-on-surface-variant mt-1.5 flex-wrap">
-                        {role === "lawyer" ? (
-                          <span>Client: <strong className="text-primary">{matter.clientName || "Client"}</strong></span>
-                        ) : (
-                          <>
-                            <span>Assigned Counsel: <strong className="text-primary">{matter.lawyer.name}</strong></span>
-                            <span className="text-hairline hidden sm:inline">•</span>
-                            <span className="text-slate font-medium">{matter.lawyer.title}</span>
-                          </>
-                        )}
+
+                      <div className="flex items-center gap-2 text-xs text-on-surface-variant mt-2 flex-wrap">
+                        <span className="font-semibold text-primary">
+                          {role === "lawyer" ? `Client: ${matter.clientName}` : matter.lawyer.name}
+                        </span>
+                        <span>•</span>
+                        <span>{matter.lawyer.jurisdiction}</span>
+                        <span>•</span>
+                        <span className="text-brass font-medium">{matter.lawyer.practiceAreas?.[0] || "General Counsel"}</span>
                       </div>
                     </div>
                   </div>
@@ -225,12 +243,12 @@ export default function CasesPage() {
                       <ShieldCheck className="w-4 h-4 text-brass" /> 100% Private &amp; Confidential
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-slate" /> {matter.messages?.length || 0} message{(matter.messages?.length || 0) === 1 ? "" : "s"}
+                      <Clock className="w-4 h-4 text-slate" /> Active Matter
                     </span>
                   </div>
 
                   <Link
-                    href={`/messages?id=${matter.id}`}
+                    href={`/messages?matterId=${matter.id}`}
                     className="bg-primary hover:bg-slate-dark text-white font-semibold px-6 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-sm hover:shadow-md btn-editorial min-h-[42px]"
                   >
                     <span>Open Case Chat</span>

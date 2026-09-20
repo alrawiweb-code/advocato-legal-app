@@ -33,14 +33,16 @@ export async function updateSession(request: NextRequest) {
   // Refresh auth token
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Protect /lawyers and its subroutes (Marketplace Phase 2 constraint)
-  if (request.nextUrl.pathname.startsWith("/lawyers")) {
-    const hasDemoAuth = request.cookies.has("advocato_demo_auth");
-    if (!user && !hasDemoAuth) {
-      const loginUrl = new URL("/login", request.url);
-      loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
-      return NextResponse.redirect(loginUrl);
-    }
+  // Protected routes that require real authenticated session
+  const protectedPrefixes = ["/lawyers", "/cases", "/messages", "/profile", "/intake", "/admin", "/lawyer/verify"];
+  const isProtected = protectedPrefixes.some((prefix) =>
+    request.nextUrl.pathname.startsWith(prefix)
+  );
+
+  if (isProtected && !user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return supabaseResponse;

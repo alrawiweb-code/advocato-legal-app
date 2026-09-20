@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getAllLawyers, INDIAN_STATES } from "@/lib/data/lawyers";
 import { uploadEvidentiaryDocument } from "@/lib/storage/documents";
+import { saveIntakeAssessment } from "@/lib/supabase/matters";
 
 interface UploadedFileItem {
   id: string;
@@ -305,6 +306,23 @@ export default function IntakePage() {
           opposingParty: opposingParty.trim() || undefined,
           documents: processedDocuments.length > 0 ? processedDocuments : data.assessment.documents,
         };
+
+        try {
+          await saveIntakeAssessment({
+            rawText: finalSituation,
+            category: data.assessment.category || "General Legal Counsel",
+            subCategory: data.assessment.subCategory || data.assessment.category,
+            jurisdiction: jurisdiction,
+            urgency: data.assessment.urgency || "Medium",
+            summary: data.assessment.summary || finalSituation.slice(0, 200),
+            extractedKeyPoints: data.assessment.extractedKeyPoints || [],
+            matchedLawyers: data.assessment.matchedLawyers || [],
+            caseTitle: data.assessment.caseTitle || `${data.assessment.category} Matter`,
+          });
+        } catch (dbErr) {
+          console.warn("Intake database persistence notice:", dbErr);
+        }
+
         if (typeof window !== "undefined") {
           localStorage.setItem("advocato_latest_intake", JSON.stringify(assessmentWithMeta));
           localStorage.setItem("advocato_intake_data", JSON.stringify(assessmentWithMeta));

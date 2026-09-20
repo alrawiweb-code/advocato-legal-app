@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Search, User, ShieldCheck, Scale, X, LogOut } from "lucide-react";
+import { Search, User, ShieldCheck, Scale, X, LogOut, Lock } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { getStoredConsultations } from "@/lib/data/consultations";
 
@@ -88,7 +88,51 @@ export function Header() {
 
           {/* Desktop Nav Links */}
           <nav className="hidden md:flex items-center gap-2">
-            {role === "client" ? (
+            {role === "admin" ? (
+              <>
+                <Link
+                  href="/admin"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                    pathname === "/admin"
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-brass" />
+                  <span>Admissions Queue</span>
+                </Link>
+                <Link
+                  href="/admin/lawyers"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
+                    pathname.startsWith("/admin/lawyers")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  Lawyers
+                </Link>
+                <Link
+                  href="/admin/matters"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
+                    pathname.startsWith("/admin/matters")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  Matters
+                </Link>
+                <Link
+                  href="/admin/audit"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
+                    pathname.startsWith("/admin/audit")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  Audit Trail
+                </Link>
+              </>
+            ) : role === "client" ? (
               <>
                 <Link
                   href="/intake"
@@ -185,6 +229,15 @@ export function Header() {
                     Public Profile
                   </Link>
                 )}
+                {!activeLawyer?.isVerified && (
+                  <Link
+                    href="/lawyer/verify"
+                    className="text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md bg-amber-500/10 text-amber-800 border border-amber-500/30 flex items-center gap-1.5 hover:bg-amber-500/20 transition-all"
+                  >
+                    <Lock className="w-3 h-3 text-amber-600" />
+                    <span>Verify Account</span>
+                  </Link>
+                )}
               </>
             )}
           </nav>
@@ -214,7 +267,7 @@ export function Header() {
                     {currentUser.name}
                   </span>
                   <span className="text-[10px] text-brass font-medium capitalize mt-0.5">
-                    {role === "lawyer" ? "Attorney" : "Client"}
+                    {role === "admin" ? "Regulatory Admin" : role === "lawyer" ? "Attorney" : "Client"}
                   </span>
                 </div>
               </Link>

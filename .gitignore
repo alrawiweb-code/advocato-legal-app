@@ -17,6 +17,7 @@
 .env*.local
 .env
 .env.production
+.agents/mcp_config.json
 
 # Vercel
 .vercel

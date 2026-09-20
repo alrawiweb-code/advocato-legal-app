@@ -12,11 +12,8 @@ export async function GET(
 
     // 1. Authorization
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    const cookieStore = await cookies();
-    const hasDemoAuth = cookieStore.has("advocato_demo_auth");
 
-    if ((authError || !user) && !hasDemoAuth) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: "Unauthorized. The Advocato marketplace requires authentication." },
         { status: 401 }
@@ -122,11 +119,8 @@ export async function POST(
 
     // 1. Authorization Check
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    const cookieStore = await cookies();
-    const hasDemoAuth = cookieStore.has("advocato_demo_auth");
 
-    if ((authError || !user) && !hasDemoAuth) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: "Unauthorized. Must be logged in to leave a review." },
         { status: 401 }
