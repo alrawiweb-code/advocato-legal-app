@@ -22,6 +22,7 @@ import { useUserRole } from "@/lib/context/RoleContext";
 import { Lawyer, Consultation } from "@/types";
 import { getUserMatters } from "@/lib/supabase/matters";
 import { VerificationModal } from "@/components/lawyer/VerificationModal";
+import { SuspensionInquiryPanel } from "@/components/lawyer/SuspensionInquiryPanel";
 
 function LawyerDashboardView() {
   const { activeLawyer, currentUser } = useUserRole();
@@ -69,7 +70,11 @@ function LawyerDashboardView() {
               Welcome, {attorneyName}
             </h1>
             <div className="text-xs sm:text-sm text-on-surface-variant mt-2 flex items-center gap-2 flex-wrap">
-              {isVerified ? (
+              {verificationStatus === "SUSPENDED" ? (
+                <span className="inline-flex items-center gap-1.5 text-orange-800 font-semibold bg-orange-50 px-2.5 py-0.5 rounded-full text-[11px] border border-orange-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-600" /> Marketplace Access Suspended
+                </span>
+              ) : isVerified ? (
                 <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold bg-emerald-50 px-2.5 py-0.5 rounded-full text-[11px] border border-emerald-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" /> Active Roster
                 </span>
@@ -94,7 +99,12 @@ function LawyerDashboardView() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            {!isVerified ? (
+            {verificationStatus === "SUSPENDED" ? (
+              <span className="inline-flex items-center gap-2 bg-orange-100 text-orange-800 text-xs font-semibold px-5 py-2.5 rounded-lg border border-orange-200">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Marketplace Access Suspended</span>
+              </span>
+            ) : !isVerified ? (
               <button
                 onClick={() => setShowVerificationModal(true)}
                 className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2 min-h-[42px]"
@@ -125,8 +135,47 @@ function LawyerDashboardView() {
           </div>
         </div>
 
+        {/* Suspension Notice Banner — shown when lawyer is SUSPENDED */}
+        {verificationStatus === "SUSPENDED" && (
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center text-orange-700 shrink-0 mt-0.5">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-headline font-semibold text-primary text-sm sm:text-base">
+                    Marketplace Access Temporarily Suspended
+                  </h3>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-800 border border-orange-500/30">
+                    SUSPENDED
+                  </span>
+                </div>
+                <p className="text-xs text-on-surface-variant mt-1 max-w-2xl leading-relaxed">
+                  Your Advocato marketplace access has been temporarily suspended by the administration team.
+                  You cannot currently receive new marketplace inquiries or appear in lawyer search results.
+                  Please contact the Advocato Admissions Desk for further information.
+                </p>
+                {(activeLawyer as any)?.suspensionReason && (
+                  <div className="mt-2 p-2.5 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-xs font-semibold text-orange-800">Admin Notice:</p>
+                    <p className="text-xs text-orange-700 mt-0.5">{(activeLawyer as any).suspensionReason}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lawyer Suspension/Rejection Inquiry Panel */}
+        <SuspensionInquiryPanel
+          verificationStatus={verificationStatus}
+          suspensionReason={(activeLawyer as any)?.suspensionReason}
+          suspendedAt={(activeLawyer as any)?.suspendedAt}
+        />
+
         {/* Admissions Verification Notification Banner */}
-        {!isVerified && (
+        {!isVerified && verificationStatus !== "SUSPENDED" && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">

@@ -112,6 +112,16 @@ export function Header() {
                   Lawyers
                 </Link>
                 <Link
+                  href="/admin/inquiries"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
+                    pathname.startsWith("/admin/inquiries")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  Inquiries
+                </Link>
+                <Link
                   href="/admin/matters"
                   className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
                     pathname.startsWith("/admin/matters")
@@ -180,7 +190,7 @@ export function Header() {
                   )}
                 </Link>
               </>
-            ) : (
+            ) : role === "lawyer" ? (
               <>
                 <Link
                   href="/"
@@ -239,6 +249,29 @@ export function Header() {
                   </Link>
                 )}
               </>
+            ) : (
+              <>
+                <Link
+                  href="/intake"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
+                    pathname.startsWith("/intake")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  Case Review
+                </Link>
+                <Link
+                  href="/lawyers"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all ${
+                    pathname.startsWith("/lawyers")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  Find a Lawyer
+                </Link>
+              </>
             )}
           </nav>
 
@@ -253,35 +286,53 @@ export function Header() {
             </button>
 
             {/* Authenticated User Capsule */}
-            <div className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-xl bg-surface-container-low border border-hairline">
-              <Link
-                href="/profile"
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                title="View Profile Settings"
-              >
-                <div className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  {userInitials}
-                </div>
-                <div className="hidden lg:flex flex-col text-left leading-none">
-                  <span className="text-xs font-bold text-primary truncate max-w-[120px]">
-                    {currentUser.name}
-                  </span>
-                  <span className="text-[10px] text-brass font-medium capitalize mt-0.5">
-                    {role === "admin" ? "Regulatory Admin" : role === "lawyer" ? "Attorney" : "Client"}
-                  </span>
-                </div>
-              </Link>
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-xl bg-surface-container-low border border-hairline">
+                <Link
+                  href="/profile"
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  title="View Profile Settings"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                    {userInitials}
+                  </div>
+                  <div className="hidden lg:flex flex-col text-left leading-none">
+                    <span className="text-xs font-bold text-primary truncate max-w-[120px]">
+                      {currentUser.name}
+                    </span>
+                    <span className="text-[10px] text-brass font-medium capitalize mt-0.5">
+                      {role === "admin" ? "Regulatory Admin" : role === "lawyer" ? "Attorney" : "Client"}
+                    </span>
+                  </div>
+                </Link>
 
-              {/* Sign Out Button */}
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="w-7 h-7 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-red-600 transition-colors ml-1"
-                title="Sign Out of Advocato"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
+                {/* Sign Out Button */}
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="w-7 h-7 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-red-600 transition-colors ml-1"
+                  title="Sign Out of Advocato"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Link
+                  href="/login"
+                  className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors px-2 sm:px-3 py-2"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/login?tab=lawyer"
+                  className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-brass hover:text-brass-hover transition-colors px-3 py-2"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>For Lawyers</span>
+                </Link>
+              </div>
+            )}
 
             {/* Quick Admin Access Link */}
             {(role === "admin" || currentUser.email === "alrawiweb@gmail.com") && (

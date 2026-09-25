@@ -42,7 +42,10 @@ export async function GET(request: Request) {
     let total = 0;
 
     if (isSupabaseConfigured) {
-      let query = supabase.from("lawyer_marketplace_view").select("*", { count: "exact" });
+      let query = supabase.from("lawyer_marketplace_view")
+        .select("*", { count: "exact" })
+        .eq("is_verified", true)
+        .eq("verification_status", "VERIFIED");
       
       // Apply filters
       if (state !== "all") query = query.eq("state", state);
@@ -51,7 +54,7 @@ export async function GET(request: Request) {
       if (minExperience > 0) query = query.gte("years_experience", minExperience);
       if (maxExperience < 40) query = query.lte("years_experience", maxExperience);
       if (language !== "all") query = query.contains("languages", [language]);
-      if (verifiedOnly) query = query.eq("is_verified", true);
+      // verifiedOnly is now implied, no need to add another filter
       
       if (availability === "today") {
          query = query.eq("availability", "Available today");
@@ -139,7 +142,7 @@ export async function GET(request: Request) {
         if (serviceId !== "all" && !l.primaryServices.includes(serviceId)) return false;
         if (l.yearsExperience < minExperience || l.yearsExperience > maxExperience) return false;
         if (language !== "all" && (!l.languages || !l.languages.includes(language))) return false;
-        if (verifiedOnly && !l.isVerified) return false;
+        if (!l.isVerified || l.verificationStatus !== "VERIFIED") return false;
         if (availability === "today" && l.availability !== "Available today") return false;
         if (availability === "this_week" && l.availability !== "Available today" && l.availability !== "This week") return false;
         if (search) {

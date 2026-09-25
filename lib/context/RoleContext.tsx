@@ -5,7 +5,7 @@ import { Lawyer, VerificationStatus } from "@/types";
 import { getLawyerById } from "@/lib/data/lawyers";
 import { createClient } from "@/lib/supabase/client";
 
-export type UserRole = "client" | "lawyer" | "admin";
+export type UserRole = "client" | "lawyer" | "admin" | "public";
 
 export interface UserPersona {
   id: string;
@@ -115,7 +115,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 
-  const hydrateUserProfile = useCallback(async (userId: string, email: string, userMeta?: any) => {
+  const hydrateUserProfile = useCallback(async (userId: string, email: string, userMeta?: any): Promise<UserRole | null> => {
     try {
       // 1. Fetch public profile
       const { data: profile } = await supabase
@@ -174,6 +174,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             notableCases: lp.notable_cases || [],
             rating: Number(lp.rating) || 5.0,
             reviewCount: lp.review_count || 0,
+            // Suspension fields
+            ...(lp.suspension_reason ? { suspensionReason: lp.suspension_reason } : {}),
+            ...(lp.suspended_at ? { suspendedAt: lp.suspended_at } : {}),
           };
           setMyLawyerProfileState(lawyerModel);
           setActiveLawyerIdState(userId);
@@ -197,8 +200,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       if (persona.lawyerId) {
         setActiveLawyerIdState(persona.lawyerId);
       }
+      return userRole;
     } catch (err) {
       console.error("Error hydrating profile from Supabase:", err);
+      return null;
     }
   }, [supabase]);
 
@@ -259,7 +264,21 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data?.user) {
-        await hydrateUserProfile(data.user.id, data.user.email || "", data.user.user_metadata);
+        const actualRole = await hydrateUserProfile(data.user.id, data.user.email || "", data.user.user_metadata);
+        
+        if (credentials.role && actualRole && credentials.role !== actualRole && actualRole !== "admin") {
+          await supabase.auth.signOut();
+          setSessionUser(null);
+          setActiveLawyerIdState(null);
+          setMyLawyerProfileState(null);
+          
+          if (actualRole === "lawyer") {
+            return { success: false, error: "This account is registered for Attorney Practice. Please sign in through the Attorney Practice portal." };
+          } else {
+            return { success: false, error: "This account is registered for the Client Portal. Please sign in through the Client Portal." };
+          }
+        }
+
         return { success: true };
       }
 
@@ -408,7 +427,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAuthenticated = sessionUser !== null;
-  const role: UserRole = sessionUser?.role || "client";
+  const role: UserRole = sessionUser?.role || "public";
   const activeLawyer =
     myLawyerProfile ||
     (activeLawyerId ? getLawyerById(activeLawyerId) : null) ||
@@ -418,7 +437,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     id: "guest",
     name: "Guest",
     email: "guest@advocato.legal",
-    role: "client",
+    role: "public",
     avatar: getInitialsAvatar("Guest User"),
   };
   const currentUserId = currentUser.id;

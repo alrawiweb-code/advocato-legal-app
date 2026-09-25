@@ -49,5 +49,32 @@ export async function updateSession(request: NextRequest) {
     return redirectRes;
   }
 
+  let userRole = "public";
+  if (user) {
+    if (user.email?.toLowerCase() === "alrawiweb@gmail.com") {
+      userRole = "admin";
+    } else {
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      userRole = profile?.role || user.user_metadata?.role || "client";
+    }
+  }
+
+  const path = request.nextUrl.pathname;
+  
+  // Admin route protection
+  if (path.startsWith("/admin") && userRole !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+  
+  // Lawyer route protection
+  if (path.startsWith("/lawyer/") && path !== "/lawyer/register" && userRole !== "lawyer" && userRole !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+  
+  // Client route protection
+  if (path.startsWith("/intake") && userRole !== "client" && userRole !== "admin" && userRole !== "public") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
   return supabaseResponse;
 }

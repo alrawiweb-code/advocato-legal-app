@@ -47,6 +47,14 @@ export async function GET(
         throw error;
       }
 
+      // Suspended lawyers are not publicly accessible
+      if (l.verification_status === "SUSPENDED" || !l.is_verified) {
+        return NextResponse.json(
+          { error: "This lawyer profile is not currently available." },
+          { status: 404 }
+        );
+      }
+
       // Fetch actual services if we have service_ids
       let populatedServices: any[] = [];
       if (l.service_ids && l.service_ids.length > 0) {
@@ -121,6 +129,84 @@ export async function GET(
 
   } catch (error: any) {
     console.error(`Error in GET /api/lawyers/[id]:`, error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
+
+    if (user.id !== id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const formData = await request.formData();
+    const name = formData.get("name") as string | null;
+    const title = formData.get("title") as string | null;
+    const headline = formData.get("headline") as string | null;
+    const hourlyRate = formData.get("hourlyRate") as string | null;
+    const jurisdiction = formData.get("jurisdiction") as string | null;
+    const bio = formData.get("bio") as string | null;
+    const avatarFile = formData.get("avatar") as File | null;
+
+    let avatarUrl = undefined;
+
+    if (avatarFile && avatarFile.size > 0) {
+      const sanitizedName = avatarFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storagePath = `${id}/${Date.now()}_${sanitizedName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(storagePath, avatarFile, { upsert: true, contentType: avatarFile.type });
+
+      if (uploadError) {
+        console.error("Avatar upload error:", uploadError);
+        return NextResponse.json({ error: "Failed to upload avatar" }, { status: 500 });
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(storagePath);
+        
+      avatarUrl = publicUrlData.publicUrl;
+    }
+
+    // Update profiles table
+    if (name || avatarUrl) {
+      const updates: any = {};
+      if (name) updates.full_name = name;
+      if (avatarUrl) updates.avatar_url = avatarUrl;
+      
+      await supabase.from("profiles").update(updates).eq("id", id);
+    }
+
+    // Update lawyer_profiles table
+    const lawyerUpdates: any = {};
+    if (title !== null) lawyerUpdates.title = title;
+    if (headline !== null) lawyerUpdates.headline = headline;
+    if (hourlyRate !== null) lawyerUpdates.hourly_rate = Number(hourlyRate);
+    if (jurisdiction !== null) lawyerUpdates.jurisdiction = jurisdiction;
+    if (bio !== null) lawyerUpdates.bio = bio;
+
+    if (Object.keys(lawyerUpdates).length > 0) {
+      await supabase.from("lawyer_profiles").update(lawyerUpdates).eq("id", id);
+    }
+
+    return NextResponse.json({ success: true, avatarUrl });
+  } catch (error: any) {
+    console.error("Error in PATCH /api/lawyers/[id]:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

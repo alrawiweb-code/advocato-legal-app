@@ -51,6 +51,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
   // Edit Profile Modal State (for lawyers)
   const [showEditModal, setShowEditModal] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
     title: "",
@@ -59,6 +60,8 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     bio: "",
     headline: "",
   });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLawyer = async () => {
@@ -76,6 +79,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
             bio: data.bio,
             headline: data.headline || "",
           });
+          setAvatarPreview(data.avatar);
         } else if (res.status === 401) {
           router.push(`/login?redirect=/lawyers/${resolvedParams.id}`);
         } else {
@@ -171,15 +175,51 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     router.push(`/messages?id=${consultation.id}`);
   };
 
-  const handleSaveProfile = () => {
-    if (lawyer) {
+  const handleSaveProfile = async () => {
+    if (!lawyer) return;
+    setIsSavingProfile(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("name", editForm.name);
+      formData.append("title", editForm.title);
+      formData.append("headline", editForm.headline);
+      formData.append("hourlyRate", editForm.hourlyRate.toString());
+      formData.append("jurisdiction", editForm.jurisdiction);
+      formData.append("bio", editForm.bio);
+      
+      if (avatarFile) {
+        formData.append("avatar", avatarFile);
+      }
+
+      const res = await fetch(`/api/lawyers/${lawyer.id}`, {
+        method: "PATCH",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save profile");
+      }
+
+      const { avatarUrl } = await res.json();
+      
       const updatedLawyer = {
         ...lawyer,
         ...editForm,
       };
+      
+      if (avatarUrl) {
+        updatedLawyer.avatar = avatarUrl;
+      }
+
       setLawyer(updatedLawyer);
       setMyLawyerProfile(updatedLawyer);
       setShowEditModal(false);
+    } catch (e) {
+      console.error(e);
+      alert("An error occurred while saving your profile.");
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -619,6 +659,30 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
             <h2 className="text-xl font-headline font-semibold text-primary mb-6">Edit Professional Profile</h2>
             
             <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-surface-container-lowest border border-hairline rounded-xl mb-2">
+                <img 
+                  src={avatarPreview || lawyer.avatar} 
+                  alt="Profile Preview" 
+                  className="w-16 h-16 rounded-full object-cover border border-hairline"
+                />
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-on-surface mb-1">Profile Photo</label>
+                  <p className="text-[11px] text-on-surface-variant mb-2">Upload a professional headshot for your directory listing.</p>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setAvatarFile(file);
+                        setAvatarPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                    className="block w-full text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-surface-container-low file:text-primary hover:file:bg-surface-container transition-colors"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-on-surface mb-1.5">Full Name</label>
@@ -653,8 +717,10 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
             </div>
 
             <div className="mt-8 flex justify-end gap-3">
-              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm font-medium text-on-surface hover:text-primary">Cancel</button>
-              <button onClick={handleSaveProfile} className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-slate-dark btn-editorial">Save Changes</button>
+              <button onClick={() => setShowEditModal(false)} disabled={isSavingProfile} className="px-4 py-2 text-sm font-medium text-on-surface hover:text-primary disabled:opacity-50">Cancel</button>
+              <button onClick={handleSaveProfile} disabled={isSavingProfile} className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-slate-dark btn-editorial flex items-center gap-2">
+                {isSavingProfile ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </div>
         </div>

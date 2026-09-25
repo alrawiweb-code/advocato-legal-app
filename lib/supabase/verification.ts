@@ -1,5 +1,12 @@
 import { createClient } from "./client";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { VerificationStatus } from "@/types";
+
+function getAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return createSupabaseClient(supabaseUrl, supabaseServiceKey);
+}
 
 export interface VerificationRequirement {
   id: string;
@@ -219,13 +226,15 @@ export async function submitVerificationApplication(payload: {
  * Fetch all applications for Admin review
  */
 export async function getAdminApplications(filterStatus?: string): Promise<LawyerApplicationRecord[]> {
-  const supabase = createClient();
+  const supabase = getAdminClient();
   let query = supabase
     .from("lawyer_verification_applications")
     .select(`
       *,
-      profiles:lawyer_id(full_name, email, avatar_url),
-      lawyer_profiles:lawyer_id(title, headline, hourly_rate, practice_areas),
+      lawyer_profiles (
+        title, headline, hourly_rate, practice_areas,
+        profiles (full_name, email, avatar_url)
+      ),
       documents:verification_documents(*)
     `)
     .order("created_at", { ascending: false });
@@ -243,9 +252,9 @@ export async function getAdminApplications(filterStatus?: string): Promise<Lawye
   return (data || []).map((row: any) => ({
     ...row,
     lawyer_profile: {
-      full_name: row.profiles?.full_name || "Advocate",
-      email: row.profiles?.email || "",
-      avatar_url: row.profiles?.avatar_url || null,
+      full_name: row.lawyer_profiles?.profiles?.full_name || "Advocate",
+      email: row.lawyer_profiles?.profiles?.email || "",
+      avatar_url: row.lawyer_profiles?.profiles?.avatar_url || null,
       title: row.lawyer_profiles?.title || "Advocate",
       headline: row.lawyer_profiles?.headline || "",
       hourly_rate: row.lawyer_profiles?.hourly_rate || 2500,
@@ -258,13 +267,15 @@ export async function getAdminApplications(filterStatus?: string): Promise<Lawye
  * Fetch single application details with pre-generated secure signed URLs for all documents
  */
 export async function getAdminApplicationDetail(applicationId: string): Promise<LawyerApplicationRecord | null> {
-  const supabase = createClient();
+  const supabase = getAdminClient();
   const { data, error } = await supabase
     .from("lawyer_verification_applications")
     .select(`
       *,
-      profiles:lawyer_id(full_name, email, avatar_url),
-      lawyer_profiles:lawyer_id(title, headline, hourly_rate, practice_areas, bio),
+      lawyer_profiles (
+        title, headline, hourly_rate, practice_areas, bio,
+        profiles (full_name, email, avatar_url)
+      ),
       documents:verification_documents(*)
     `)
     .eq("id", applicationId)
@@ -297,9 +308,9 @@ export async function getAdminApplicationDetail(applicationId: string): Promise<
   return {
     ...data,
     lawyer_profile: {
-      full_name: data.profiles?.full_name || "Advocate",
-      email: data.profiles?.email || "",
-      avatar_url: data.profiles?.avatar_url || null,
+      full_name: data.lawyer_profiles?.profiles?.full_name || "Advocate",
+      email: data.lawyer_profiles?.profiles?.email || "",
+      avatar_url: data.lawyer_profiles?.profiles?.avatar_url || null,
       title: data.lawyer_profiles?.title || "Advocate",
       headline: data.lawyer_profiles?.headline || "",
       hourly_rate: data.lawyer_profiles?.hourly_rate || 2500,
@@ -317,7 +328,7 @@ export async function approveLawyerApplication(
   lawyerId: string,
   adminId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient();
+  const supabase = getAdminClient();
 
   try {
     // 1. Update application status
@@ -381,7 +392,7 @@ export async function rejectLawyerApplication(
   adminId: string,
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient();
+  const supabase = getAdminClient();
 
   try {
     // 1. Update application status
@@ -427,19 +438,163 @@ export async function rejectLawyerApplication(
 }
 
 /**
+ * Admin: Suspend a VERIFIED lawyer — transitions VERIFIED → SUSPENDED
+ * Only callable server-side with admin credentials.
+ */
+export async function suspendLawyer(
+  lawyerId: string,
+  adminId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = getAdminClient();
+
+  try {
+    // 1. Verify the lawyer is currently VERIFIED before transitioning
+    const { data: currentProfile, error: fetchErr } = await supabase
+      .from("lawyer_profiles")
+      .select("is_verified, verification_status")
+      .eq("id", lawyerId)
+      .single();
+
+    if (fetchErr || !currentProfile) {
+      return { success: false, error: "Lawyer profile not found." };
+    }
+
+    if (currentProfile.verification_status !== "VERIFIED") {
+      return {
+        success: false,
+        error: `Cannot suspend: lawyer is currently ${currentProfile.verification_status}, not VERIFIED.`,
+      };
+    }
+
+    // 2. Transition: VERIFIED → SUSPENDED
+    const { error: updateErr } = await supabase
+      .from("lawyer_profiles")
+      .update({
+        is_verified: false,
+        verification_status: "SUSPENDED",
+        accepting_clients: false,
+        suspension_reason: reason.trim(),
+        suspended_at: new Date().toISOString(),
+      })
+      .eq("id", lawyerId);
+
+    if (updateErr) throw updateErr;
+
+    // 3. Find the most recent application to attach the audit log to
+    const { data: latestApp } = await supabase
+      .from("lawyer_verification_applications")
+      .select("id")
+      .eq("lawyer_id", lawyerId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // 4. Write audit log
+    await supabase.from("verification_audit_logs").insert({
+      application_id: latestApp?.id || null,
+      actor_id: adminId,
+      actor_role: "admin",
+      action: "LAWYER_SUSPENDED",
+      previous_status: "VERIFIED",
+      new_status: "SUSPENDED",
+      reason: reason.trim(),
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Suspend lawyer error:", err);
+    return { success: false, error: err.message || "Failed to suspend lawyer" };
+  }
+}
+
+/**
+ * Admin: Reactivate a SUSPENDED lawyer — transitions SUSPENDED → VERIFIED
+ * Only callable server-side with admin credentials.
+ */
+export async function reactivateLawyer(
+  lawyerId: string,
+  adminId: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = getAdminClient();
+
+  try {
+    // 1. Verify the lawyer is currently SUSPENDED before transitioning
+    const { data: currentProfile, error: fetchErr } = await supabase
+      .from("lawyer_profiles")
+      .select("is_verified, verification_status")
+      .eq("id", lawyerId)
+      .single();
+
+    if (fetchErr || !currentProfile) {
+      return { success: false, error: "Lawyer profile not found." };
+    }
+
+    if (currentProfile.verification_status !== "SUSPENDED") {
+      return {
+        success: false,
+        error: `Cannot reactivate: lawyer is currently ${currentProfile.verification_status}, not SUSPENDED.`,
+      };
+    }
+
+    // 2. Transition: SUSPENDED → VERIFIED
+    const { error: updateErr } = await supabase
+      .from("lawyer_profiles")
+      .update({
+        is_verified: true,
+        verification_status: "VERIFIED",
+        accepting_clients: true,
+        suspension_reason: null,
+        suspended_at: null,
+      })
+      .eq("id", lawyerId);
+
+    if (updateErr) throw updateErr;
+
+    // 3. Find the most recent application to attach the audit log to
+    const { data: latestApp } = await supabase
+      .from("lawyer_verification_applications")
+      .select("id")
+      .eq("lawyer_id", lawyerId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // 4. Write audit log
+    await supabase.from("verification_audit_logs").insert({
+      application_id: latestApp?.id || null,
+      actor_id: adminId,
+      actor_role: "admin",
+      action: "LAWYER_REACTIVATED",
+      previous_status: "SUSPENDED",
+      new_status: "VERIFIED",
+      reason: reason.trim(),
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Reactivate lawyer error:", err);
+    return { success: false, error: err.message || "Failed to reactivate lawyer" };
+  }
+}
+
+/**
  * Fetch high-level admin metrics
  */
 export async function getAdminPlatformMetrics(): Promise<{
   pendingApplications: number;
   verifiedLawyers: number;
+  suspendedLawyers: number;
   rejectedApplications: number;
   totalMatters: number;
 }> {
-  const supabase = createClient();
+  const supabase = getAdminClient();
 
   const [
     { count: pendingCount },
     { count: verifiedCount },
+    { count: suspendedCount },
     { count: rejectedCount },
     { count: mattersCount },
   ] = await Promise.all([
@@ -452,6 +607,10 @@ export async function getAdminPlatformMetrics(): Promise<{
       .select("*", { count: "exact", head: true })
       .eq("is_verified", true),
     supabase
+      .from("lawyer_profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("verification_status", "SUSPENDED"),
+    supabase
       .from("lawyer_verification_applications")
       .select("*", { count: "exact", head: true })
       .eq("status", "REJECTED"),
@@ -463,6 +622,7 @@ export async function getAdminPlatformMetrics(): Promise<{
   return {
     pendingApplications: pendingCount || 0,
     verifiedLawyers: verifiedCount || 0,
+    suspendedLawyers: suspendedCount || 0,
     rejectedApplications: rejectedCount || 0,
     totalMatters: mattersCount || 0,
   };
