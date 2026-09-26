@@ -175,7 +175,7 @@ export default function CasesPage() {
               </Link>
             ) : (
               <Link
-                href={`/lawyers/${activeLawyer?.id || "1"}`}
+                href={`/lawyers/${activeLawyer?.id || ""}`}
                 className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-6 py-3 rounded-lg inline-flex items-center gap-2 shadow-xs transition-colors"
               >
                 <span>View Public Profile</span>

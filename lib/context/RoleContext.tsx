@@ -32,38 +32,7 @@ export function getInitialsAvatar(name: string): string {
   return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231a2634"/><text x="50" y="55" font-family="system-ui,-apple-system,sans-serif" font-size="38" font-weight="700" fill="%23c5a059" text-anchor="middle" dominant-baseline="middle">${initials}</text></svg>`;
 }
 
-// Deprecated stubs for backward compatibility
-export const DEMO_CLIENT: UserPersona = {
-  id: "client-alex-mercer",
-  name: "Alex Mercer",
-  email: "alex.mercer@company.com",
-  role: "client",
-  avatar: getInitialsAvatar("Alex Mercer"),
-};
-
-export const DEMO_LAWYER_SARAH: UserPersona = {
-  id: "lawyer-1",
-  name: "Sarah Jenkins, Adv.",
-  email: "sarah.jenkins@jenkinslaw.com",
-  role: "lawyer",
-  avatar: getInitialsAvatar("Sarah Jenkins"),
-  lawyerId: "1",
-  barNumber: "D/4921/2012",
-  jurisdiction: "Delhi (DL)",
-};
-
-export const DEMO_LAWYER_MARCUS: UserPersona = {
-  id: "lawyer-2",
-  name: "Marcus Vance, Adv.",
-  email: "marcus.vance@vancelegal.com",
-  role: "lawyer",
-  avatar: getInitialsAvatar("Marcus Vance"),
-  lawyerId: "2",
-  barNumber: "MAH/8291/2008",
-  jurisdiction: "Maharashtra (MH)",
-};
-
-export const DEMO_ACCOUNTS = [DEMO_CLIENT, DEMO_LAWYER_SARAH, DEMO_LAWYER_MARCUS];
+// Removed mock personas for production purity
 
 interface LoginCredentials {
   email?: string;
@@ -430,8 +399,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const role: UserRole = sessionUser?.role || "public";
   const activeLawyer =
     myLawyerProfile ||
-    (activeLawyerId ? getLawyerById(activeLawyerId) : null) ||
-    (role === "lawyer" ? getLawyerById("1") || null : null);
+    (activeLawyerId ? getLawyerById(activeLawyerId) : null);
 
   const currentUser: UserPersona = sessionUser || {
     id: "guest",

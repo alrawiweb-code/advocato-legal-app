@@ -17,21 +17,10 @@ export function Header() {
   const [hasIntake, setHasIntake] = useState(false);
 
   useEffect(() => {
-    try {
-      const savedIntake = localStorage.getItem("advocato_latest_intake") || localStorage.getItem("advocato_intake_data");
-      setHasIntake(Boolean(savedIntake));
-
-      const consultations = getStoredConsultations();
-      let count = 0;
-      consultations.forEach((c) => {
-        c.messages?.forEach((m) => {
-          if (m.senderRole !== role && m.status !== "read") {
-            count++;
-          }
-        });
-      });
-      setUnreadCount(count);
-    } catch (e) {}
+    // For production, this should fetch actual unread counts and intake status from Supabase
+    // instead of relying on localStorage overrides.
+    setHasIntake(false);
+    setUnreadCount(0);
   }, [role, pathname]);
 
   const handleSignOut = async () => {

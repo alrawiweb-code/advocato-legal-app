@@ -6,27 +6,11 @@ export const INITIAL_CONSULTATIONS: Consultation[] = [];
 export const CONSULTATION_STORAGE_KEY = "advocato_consultations";
 
 export function getStoredConsultations(): Consultation[] {
-  if (typeof window !== "undefined") {
-    try {
-      const stored = localStorage.getItem(CONSULTATION_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error("Failed to load consultations from storage", e);
-    }
-  }
   return INITIAL_CONSULTATIONS;
 }
 
 export function saveStoredConsultations(consultations: Consultation[]): void {
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.setItem(CONSULTATION_STORAGE_KEY, JSON.stringify(consultations));
-    } catch (e) {
-      console.error("Failed to save consultations to storage", e);
-    }
-  }
+  // No-op for production, data should be saved to Supabase
 }
 
 export interface CreateConsultationOptions {
@@ -86,48 +70,19 @@ export function getOrCreateConsultationForLawyer(
 
   // Look up lawyer from all lawyers (including newly registered lawyers)
   const allLawyers = getAllLawyers();
-  const lawyer = allLawyers.find((l) => l.id === lawyerId) || {
-    id: lawyerId,
-    name: "Lawyer",
-    title: "Advocate at Law",
-    avatar: "https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400",
-    rating: 5.0,
-    reviewCount: 0,
-    hourlyRate: 3500,
-    isVerified: true,
-    availability: "Available today" as const,
-    yearsExperience: 10,
-    jurisdiction: "Pending Verification",
-    tags: ["General Practice"],
-    practiceAreas: ["General Practice"],
-    bio: "Licensed advocate providing privileged counsel.",
-    notableCases: [],
-  };
+  const lawyer = allLawyers.find((l) => l.id === lawyerId);
 
-  // Attempt to read intake data from localStorage if not explicitly supplied
+  if (!lawyer) {
+    throw new Error("Lawyer not found for consultation");
+  }
+
   let resolvedCaseTitle = options.caseTitle;
   let resolvedBrief = options.intakeBrief;
   let resolvedOpposingParty = options.opposingParty;
   let resolvedJurisdiction = options.jurisdiction;
   let resolvedDocs = options.documents || [];
 
-  if (typeof window !== "undefined") {
-    try {
-      const storedIntake = localStorage.getItem("advocato_latest_intake") || localStorage.getItem("advocato_intake_data");
-      if (storedIntake) {
-        const parsed = JSON.parse(storedIntake);
-        if (!resolvedCaseTitle) resolvedCaseTitle = parsed.caseTitle || `${parsed.category} Review`;
-        if (!resolvedBrief) resolvedBrief = parsed.rawText || parsed.summary;
-        if (!resolvedOpposingParty) resolvedOpposingParty = parsed.opposingParty;
-        if (!resolvedJurisdiction) resolvedJurisdiction = parsed.jurisdiction;
-        if (resolvedDocs.length === 0 && parsed.documents) {
-          resolvedDocs = parsed.documents;
-        }
-      }
-    } catch (e) {}
-  }
-
-  const resolvedClientName = options.clientName || "Alex Mercer";
+  const resolvedClientName = options.clientName || "Client";
   const finalTitle = resolvedCaseTitle || `Consultation with ${lawyer.name}`;
 
   // Seed messages with initial privileged case dossier
