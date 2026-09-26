@@ -22,6 +22,8 @@ export interface MatterRecord {
   status: string;
   created_at: string;
   updated_at: string;
+  appointment_date?: string | null;
+  consultation_type?: string | null;
   client?: {
     id: string;
     full_name: string;

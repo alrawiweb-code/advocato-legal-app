@@ -130,8 +130,8 @@ function MessagesView() {
               category: m.category,
               status: (m.status as any) || "active",
               clientName: m.client?.full_name || "Client",
-              appointmentDate: m.appointment_date,
-              consultationType: m.consultation_type,
+              appointmentDate: m.appointment_date || undefined,
+              consultationType: (m.consultation_type as any) || undefined,
               lawyer: {
                 id: m.lawyer?.id || m.lawyer_id,
                 name: counselorName,
