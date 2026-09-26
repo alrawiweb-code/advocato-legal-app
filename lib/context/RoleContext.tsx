@@ -149,6 +149,30 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           };
           setMyLawyerProfileState(lawyerModel);
           setActiveLawyerIdState(userId);
+        } else {
+          const fallbackModel: Lawyer = {
+            id: userId,
+            name: fullName,
+            title: "Advocate",
+            headline: "Legal Specialist",
+            yearsExperience: 5,
+            hourlyRate: 2500,
+            isVerified: false,
+            verificationStatus: "NOT_VERIFIED",
+            availability: "Available today",
+            jurisdiction: userMeta?.jurisdiction || "Delhi (DL)",
+            state: userMeta?.jurisdiction || "Delhi (DL)",
+            languages: ["English", "Hindi"],
+            practiceAreas: ["General Legal Counsel"],
+            tags: [],
+            avatar: profile?.avatar_url || getInitialsAvatar(fullName),
+            bio: "Licensed attorney admitted to the Bar Council.",
+            notableCases: [],
+            rating: 5.0,
+            reviewCount: 0,
+          };
+          setMyLawyerProfileState(fallbackModel);
+          setActiveLawyerIdState(userId);
         }
       }
 

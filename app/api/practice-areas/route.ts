@@ -7,15 +7,8 @@ export async function GET() {
   try {
     const supabase = await createClient();
 
-    // 1. Authorization: API must be authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Unauthorized. The Advocato marketplace requires authentication." },
-        { status: 401 }
-      );
-    }
+    // Public read endpoint: guests and authenticated clients can browse taxonomy
+    const { data: { user } } = await supabase.auth.getUser();
 
     // 2. Fetch Practice Areas Taxonomy from Supabase
     const { data: categories, error: catError } = await supabase

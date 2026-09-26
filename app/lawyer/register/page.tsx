@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, ShieldCheck, Scale, FileCheck, IndianRupee, Building2, Gavel } from "lucide-react";
-import { registerNewLawyer, INDIAN_STATES } from "@/lib/data/lawyers";
+import { ArrowRight, CheckCircle2, ShieldCheck, Scale, FileCheck, IndianRupee, Building2, Gavel, AlertCircle, Loader2 } from "lucide-react";
+import { INDIAN_STATES } from "@/lib/data/lawyers";
 import { Lawyer } from "@/types";
 import { useUserRole } from "@/lib/context/RoleContext";
 
 export default function LawyerRegistrationPage() {
-  const { setRole, setMyLawyerProfile } = useUserRole();
+  const { registerLawyer } = useUserRole();
   const [step, setStep] = useState<number>(0); // 0 = Landing, 1 = Personal, 2 = Bar credentials, 3 = Pricing, 4 = Submitted
-  const [registeredLawyer, setRegisteredLawyer] = useState<Lawyer | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -21,26 +22,42 @@ export default function LawyerRegistrationPage() {
     primaryPractice: "Employment & Labor Law",
     hourlyRate: "2500",
     bio: "",
+    password: "",
   });
 
-  const handleNext = (e: React.FormEvent) => {
+  const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+
     if (step === 3) {
-      const created = registerNewLawyer({
-        fullName: formData.fullName,
-        firmName: formData.firmName,
-        email: formData.email,
-        barNumber: formData.barNumber,
-        stateBar: formData.stateBar,
-        yearsExperience: formData.yearsExperience,
-        primaryPractice: formData.primaryPractice,
-        hourlyRate: formData.hourlyRate,
-        bio: formData.bio,
-      });
-      setRegisteredLawyer(created);
-      setRole("lawyer");
-      setMyLawyerProfile(created);
-      setStep(4);
+      if (!formData.password || formData.password.length < 6) {
+        setErrorMessage("Please enter a secure password of at least 6 characters.");
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const res = await registerLawyer({
+          name: formData.fullName.trim(),
+          email: formData.email.trim(),
+          barNumber: formData.barNumber.trim(),
+          stateBar: formData.stateBar,
+          primaryPractice: formData.primaryPractice,
+          hourlyRate: Number(formData.hourlyRate) || 2500,
+          bio: formData.bio.trim() || `Licensed advocate admitted to ${formData.stateBar} specializing in ${formData.primaryPractice}.`,
+          password: formData.password,
+        });
+
+        if (res.success) {
+          setStep(4);
+        } else {
+          setErrorMessage(res.error || "Attorney registration failed. Please try again.");
+        }
+      } catch (err: any) {
+        setErrorMessage(err.message || "An unexpected error occurred.");
+      } finally {
+        setIsSubmitting(false);
+      }
     } else {
       setStep((prev) => prev + 1);
     }
@@ -214,6 +231,7 @@ export default function LawyerRegistrationPage() {
                     primaryPractice: "Employment & Labor Law",
                     hourlyRate: "2500",
                     bio: "",
+                    password: "",
                   });
                   setStep(0);
                 }}
@@ -380,25 +398,60 @@ export default function LawyerRegistrationPage() {
                       className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:border-slate focus:outline-none resize-none"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface mb-1">
+                      Account Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Minimum 6 characters"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:border-slate focus:outline-none"
+                    />
+                    <p className="text-[11px] text-on-surface-variant mt-1">
+                      You will use this password to sign in to your attorney portal.
+                    </p>
+                  </div>
                 </>
+              )}
+
+              {errorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2 text-xs text-red-600">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
               )}
 
               <div className="pt-4 flex items-center justify-between gap-3">
                 {step > 1 && (
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => setStep((prev) => prev - 1)}
-                    className="px-5 py-2.5 rounded-lg border border-hairline text-xs font-semibold text-on-surface hover:bg-surface-container-low btn-editorial-secondary min-h-[44px]"
+                    className="px-5 py-2.5 rounded-lg border border-hairline text-xs font-semibold text-on-surface hover:bg-surface-container-low btn-editorial-secondary min-h-[44px] disabled:opacity-50"
                   >
                     Back
                   </button>
                 )}
                 <button
                   type="submit"
-                  className="flex-1 bg-brass hover:bg-brass-hover text-white text-xs font-semibold py-3 px-6 rounded-lg shadow-sm hover:shadow-md btn-editorial-brass flex items-center justify-center gap-2 ml-auto min-h-[44px]"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-brass hover:bg-brass-hover text-white text-xs font-semibold py-3 px-6 rounded-lg shadow-sm hover:shadow-md btn-editorial-brass flex items-center justify-center gap-2 ml-auto min-h-[44px] disabled:opacity-50"
                 >
-                  <span>{step === 3 ? "Complete Registration" : "Continue"}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{step === 3 ? "Complete Registration" : "Continue"}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>

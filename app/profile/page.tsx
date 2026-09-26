@@ -65,7 +65,13 @@ export default function ProfilePage() {
                   <p className="text-xs text-on-surface-variant truncate">{currentUser.email}</p>
                   <div className="flex items-center gap-1.5 text-[11px] text-brass font-medium mt-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-brass shrink-0" />
-                    <span>{role === "client" ? "Verified Client Account" : `Verified Attorney (${activeLawyer?.jurisdiction || "Active License"})`}</span>
+                    <span>
+                      {role === "admin"
+                        ? "Regulatory Administrator"
+                        : role === "client"
+                        ? "Verified Client Account"
+                        : `Verified Attorney (${activeLawyer?.jurisdiction || "Active License"})`}
+                    </span>
                   </div>
                 </div>
               </div>

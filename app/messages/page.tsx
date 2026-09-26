@@ -398,7 +398,7 @@ function MessagesView() {
         await supabase.from("messages").insert({
           matter_id: activeConsultation.id,
           sender_id: user.id,
-          sender_role: role,
+          sender_role: role === "lawyer" ? "lawyer" : "client",
           text: currentText,
         });
       } catch (err) {
@@ -502,7 +502,7 @@ function MessagesView() {
         await supabase.from("messages").insert({
           matter_id: activeConsultation.id,
           sender_id: user.id,
-          sender_role: role,
+          sender_role: role === "lawyer" ? "lawyer" : "client",
           text: "🎤 Voice Note",
           audio_url: voiceMsg.audioUrl,
           audio_storage_path: voiceMsg.audioStoragePath,
@@ -572,7 +572,7 @@ function MessagesView() {
         await supabase.from("messages").insert({
           matter_id: activeConsultation.id,
           sender_id: user.id,
-          sender_role: role,
+          sender_role: role === "lawyer" ? "lawyer" : "client",
           text: `Attached privileged evidentiary exhibit: ${file.name}`,
           document_id: insertedDoc?.id || null,
         });
