@@ -91,6 +91,7 @@ function MessagesView() {
 
   // Modals
   const [activeCallModal, setActiveCallModal] = useState<"video" | "phone" | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ callType: "video" | "phone"; senderName: string } | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentAttachment | null>(null);
   const [phoneCallConnected, setPhoneCallConnected] = useState(false);
   const [phoneCallDuration, setPhoneCallDuration] = useState(0);
@@ -317,6 +318,11 @@ function MessagesView() {
           setIsCounterpartTyping(Boolean(payload.isTyping));
         }
       })
+      .on("broadcast", { event: "incoming-call" }, ({ payload }) => {
+        if (payload && payload.senderRole !== role) {
+          setIncomingCall({ callType: payload.callType, senderName: payload.senderName });
+        }
+      })
       .subscribe();
 
     return () => {
@@ -359,6 +365,20 @@ function MessagesView() {
     setActiveMatterId(cons.id);
     setMobileShowChat(true);
     setShowNewConsultationModal(false);
+  };
+
+  const handleCallStart = (type: "video" | "phone") => {
+    setActiveCallModal(type);
+    const supabase = createClient();
+    supabase.channel(`matter-chat-${activeMatterId}`).send({
+      type: "broadcast",
+      event: "incoming-call",
+      payload: { 
+        callType: type, 
+        senderRole: role, 
+        senderName: role === "lawyer" ? (activeConsultation?.lawyer.name || "Attorney") : (currentUser.name || "Client") 
+      },
+    });
   };
 
   // Broadcast typing indicator
@@ -991,7 +1011,7 @@ function MessagesView() {
               {/* Action Buttons */}
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => setActiveCallModal("phone")}
+                  onClick={() => handleCallStart("phone")}
                   aria-label="Direct audio call"
                   className="w-9 h-9 flex items-center justify-center rounded-lg border border-hairline hover:bg-surface-container text-on-surface-variant transition-colors"
                   title="Direct audio call"
@@ -1000,7 +1020,7 @@ function MessagesView() {
                 </button>
 
                 <button
-                  onClick={() => setActiveCallModal("video")}
+                  onClick={() => handleCallStart("video")}
                   aria-label="Private video call"
                   className="px-3 py-1.5 rounded-lg bg-brass text-white text-xs font-semibold hover:bg-brass-hover flex items-center gap-1.5 shadow-2xs transition-colors min-h-[36px]"
                 >
@@ -1032,7 +1052,7 @@ function MessagesView() {
                   </span>
                 </div>
                 <button
-                  onClick={() => setActiveCallModal(activeConsultation.consultationType === "phone" ? "phone" : "video")}
+                  onClick={() => handleCallStart(activeConsultation.consultationType === "phone" ? "phone" : "video")}
                   className="px-2.5 py-1 rounded bg-brass text-white text-[11px] font-semibold hover:bg-brass-hover transition-colors shadow-2xs"
                 >
                   Join Meeting
@@ -1247,7 +1267,7 @@ function MessagesView() {
                   <button
                     onClick={() => {
                       setShowAttachMenu(false);
-                      setActiveCallModal("video");
+                      handleCallStart("video");
                     }}
                     className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-surface-container-low text-xs font-semibold text-primary transition-colors text-left"
                   >
@@ -1658,6 +1678,36 @@ function MessagesView() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Incoming Call Modal */}
+      {incomingCall && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-surface rounded-2xl shadow-editorial p-6 max-w-sm w-full text-center border border-hairline">
+            <div className="w-16 h-16 rounded-full bg-brass/10 flex items-center justify-center mx-auto mb-4 animate-pulse">
+              {incomingCall.callType === "video" ? <Video className="w-8 h-8 text-brass" /> : <Phone className="w-8 h-8 text-brass" />}
+            </div>
+            <h3 className="text-xl font-headline font-semibold text-primary mb-1">Incoming {incomingCall.callType === "video" ? "Video" : "Audio"} Call</h3>
+            <p className="text-sm text-on-surface-variant mb-6"><span className="font-semibold text-primary">{incomingCall.senderName}</span> is calling you.</p>
+            <div className="flex items-center gap-3 justify-center">
+              <button
+                onClick={() => setIncomingCall(null)}
+                className="w-full bg-surface-container-highest hover:bg-surface-container text-primary font-semibold py-3 rounded-xl transition-colors"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => {
+                  setActiveCallModal(incomingCall.callType);
+                  setIncomingCall(null);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition-colors"
+              >
+                Accept
+              </button>
             </div>
           </div>
         </div>
