@@ -7,6 +7,7 @@ export interface CreateMatterOptions {
   jurisdiction?: string;
   urgency?: "High" | "Medium" | "Low";
   appointmentDate?: string;
+  consultationType?: "video" | "phone";
 }
 
 export interface MatterRecord {
@@ -82,6 +83,8 @@ export async function createOrGetMatter(options: CreateMatterOptions): Promise<{
         jurisdiction: jurisdiction,
         urgency: urgency,
         status: options.appointmentDate ? "scheduled" : "active",
+        appointment_date: options.appointmentDate || null,
+        consultation_type: options.consultationType || "video",
       })
       .select(`
         *,

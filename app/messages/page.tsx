@@ -206,7 +206,7 @@ function MessagesView() {
           const mappedMsgs: ConsultationMessage[] = dbMessages.map((m: any) => ({
             id: m.id,
             senderRole: m.sender_role,
-            senderName: m.sender_role === "lawyer" ? "Attorney" : "Client",
+            senderName: m.sender_role === "lawyer" ? (activeConsultation?.lawyer?.name || "Attorney") : (currentUser.name || "Client"),
             text: m.text || "",
             timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             status: "read",
@@ -272,7 +272,7 @@ function MessagesView() {
           const incomingMsg: ConsultationMessage = {
             id: r.id,
             senderRole: r.sender_role,
-            senderName: r.sender_role === "lawyer" ? "Attorney" : "Client",
+            senderName: r.sender_role === "lawyer" ? (activeConsultation?.lawyer?.name || "Attorney") : (currentUser.name || "Client"),
             text: r.text || "",
             timestamp: new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             status: "read",
@@ -493,9 +493,27 @@ function MessagesView() {
     });
 
     setConsultations(updated);
-    saveStoredConsultations(updated);
 
+    // Persist voice note message to Supabase messages table
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && activeConsultation?.id) {
+      try {
+        await supabase.from("messages").insert({
+          matter_id: activeConsultation.id,
+          sender_id: user.id,
+          sender_role: role,
+          text: "🎤 Voice Note",
+          audio_url: voiceMsg.audioUrl,
+          audio_storage_path: voiceMsg.audioStoragePath,
+          audio_duration: voiceMsg.audioDuration,
+          is_voice_note: true,
+        });
+      } catch (err) {
+        console.warn("Voice note DB insertion notice:", err);
+      }
+    }
+
     supabase.channel(`matter-chat-${activeMatterId}`).send({
       type: "broadcast",
       event: "new-message",
@@ -1520,153 +1538,19 @@ function MessagesView() {
         />
       )}
 
-      {/* Privileged Audio Tele-Consultation Bridge */}
+      {/* Real WebRTC Audio-Only Call (replaces fake phone modal) */}
       {activeCallModal === "phone" && activeConsultation && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-surface rounded-t-2xl sm:rounded-2xl border-t sm:border border-hairline shadow-editorial w-full max-w-md flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
-            {/* Mobile Sheet Drag Handle */}
-            <div className="sm:hidden w-10 h-1 bg-outline-variant/60 rounded-full mx-auto my-2.5 shrink-0" />
-            <div className="p-4 border-b border-hairline flex items-center justify-between bg-surface-container-lowest shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-brass/10 flex items-center justify-center">
-                  <PhoneCall className="w-4 h-4 text-brass" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-primary uppercase tracking-wider">Direct Audio Bridge</h4>
-                  <span className="text-[10px] text-on-surface-variant">Confidential Telephonic Line</span>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setPhoneCallConnected(false);
-                  setActiveCallModal(null);
-                }}
-                className="w-7 h-7 rounded-full hover:bg-surface-container flex items-center justify-center"
-              >
-                <X className="w-4 h-4 text-on-surface-variant" />
-              </button>
-            </div>
-
-            <div className="p-6 text-center space-y-4">
-              <div className="relative mx-auto w-20 h-20 rounded-full border-2 border-brass/30 flex items-center justify-center bg-surface-container-low overflow-hidden">
-                {role === "lawyer" ? (
-                  <span className="text-xl font-bold text-primary">
-                    {(activeConsultation.clientName || currentUser.name || "CL").slice(0, 2).toUpperCase()}
-                  </span>
-                ) : (
-                  <img
-                    src={activeConsultation.lawyer.avatar}
-                    alt={activeConsultation.lawyer.name}
-                    className="w-full h-full object-cover"
-                  />
-                )}
-                {phoneCallConnected && (
-                  <span className="absolute top-1 right-1 flex h-3.5 w-3.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <h3 className="font-bold text-base text-primary">
-                  {role === "lawyer" ? (activeConsultation.clientName || currentUser.name) : activeConsultation.lawyer.name}
-                </h3>
-                <p className="text-xs text-on-surface-variant mt-0.5">
-                  Matter: {activeConsultation.caseTitle}
-                </p>
-              </div>
-
-              {phoneCallConnected ? (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-                  <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider block">
-                    Call Connected • Encrypted Audio
-                  </span>
-                  <span className="text-2xl font-mono font-bold text-emerald-900 mt-1 block">
-                    {Math.floor(phoneCallDuration / 60).toString().padStart(2, "0")}:{(phoneCallDuration % 60).toString().padStart(2, "0")}
-                  </span>
-                  <div className="flex items-center justify-center gap-1 mt-3">
-                    <span className="w-1 h-3 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="w-1 h-5 bg-emerald-600 rounded-full animate-pulse delay-75" />
-                    <span className="w-1 h-2 bg-emerald-500 rounded-full animate-pulse delay-150" />
-                    <span className="w-1 h-6 bg-emerald-700 rounded-full animate-pulse delay-100" />
-                    <span className="w-1 h-3 bg-emerald-500 rounded-full animate-pulse" />
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-surface-container-low border border-hairline rounded-xl p-4 text-left space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-on-surface-variant">Toll-Free Conference Line</span>
-                    <span className="font-mono font-bold text-primary">1800-120-0199 (Toll-Free India)</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-on-surface-variant">Conference PIN</span>
-                    <span className="font-mono font-bold text-primary">
-                      {activeConsultation.id.slice(0, 4).toUpperCase()} #
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(`Dial 1800-120-0199 PIN: ${activeConsultation.id.slice(0, 4).toUpperCase()}#`);
-                      setCopiedBridgePin(true);
-                      setTimeout(() => setCopiedBridgePin(false), 2000);
-                    }}
-                    className="w-full mt-2 py-1.5 px-3 rounded-lg border border-hairline bg-surface-container-lowest text-[11px] font-semibold text-primary hover:bg-surface-container flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-brass" />
-                    <span>{copiedBridgePin ? "Dial-In Copied!" : "Copy Dial-In Info"}</span>
-                  </button>
-                </div>
-              )}
-
-              <div className="text-[11px] text-on-surface-variant flex items-center justify-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Protected by Attorney-Client Privilege</span>
-              </div>
-            </div>
-
-            <div className="p-4 bg-surface-container-lowest border-t border-hairline flex items-center justify-center gap-3">
-              {phoneCallConnected ? (
-                <>
-                  <button
-                    onClick={() => setPhoneIsMuted(!phoneIsMuted)}
-                    className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 border ${
-                      phoneIsMuted ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-surface-container text-primary border-hairline"
-                    }`}
-                  >
-                    {phoneIsMuted ? "Unmute Mic" : "Mute Mic"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPhoneCallConnected(false);
-                      setActiveCallModal(null);
-                    }}
-                    className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
-                  >
-                    <PhoneOff className="w-3.5 h-3.5" />
-                    <span>End Audio Call</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => setActiveCallModal(null)}
-                    className="px-4 py-2 rounded-lg border border-hairline text-xs font-semibold text-on-surface-variant hover:bg-surface-container transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => setPhoneCallConnected(true)}
-                    className="px-5 py-2 rounded-lg bg-brass hover:bg-brass-hover text-white text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
-                  >
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    <span>Start Web Audio Call</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <VideoConsultationRoom
+          matterId={activeMatterId}
+          caseTitle={activeConsultation.caseTitle}
+          counterpartName={
+            role === "lawyer"
+              ? (activeConsultation.clientName || currentUser.name)
+              : activeConsultation.lawyer.name
+          }
+          onClose={() => setActiveCallModal(null)}
+          audioOnly={true}
+        />
       )}
 
       {/* Evidentiary Document Preview Modal (Native Bottom Sheet on Mobile) */}

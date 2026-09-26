@@ -51,7 +51,7 @@ export async function uploadEvidentiaryDocument(
         // Generate a 15-minute expiring signed URL for privileged preview
         const { data: signedData } = await supabase.storage
           .from("case-documents")
-          .createSignedUrl(storagePath, 900);
+          .createSignedUrl(storagePath, 86400); // 24 hours
 
         if (signedData?.signedUrl) {
           previewUrl = signedData.signedUrl;

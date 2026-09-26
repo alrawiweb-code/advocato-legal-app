@@ -46,7 +46,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
   // Booking Modal State
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("Tomorrow, 10:00 AM IST");
+  const [selectedDate, setSelectedDate] = useState("");
   const [consultationType, setConsultationType] = useState<"video" | "phone">("video");
 
   // Edit Profile Modal State (for lawyers)
@@ -595,50 +595,39 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface mb-2">
-                  Choose a Time
+                  Propose a Date &amp; Time
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    "Tomorrow, 10:00 AM IST",
-                    "Tomorrow, 2:30 PM IST",
-                    "Thursday, 11:00 AM IST",
-                    "Thursday, 4:00 PM IST",
-                  ].map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setSelectedDate(slot)}
-                      className={`p-2.5 rounded-lg border text-xs font-medium text-left flex items-center justify-between ${
-                        selectedDate === slot
-                          ? "border-brass bg-brass/10 text-primary font-semibold"
-                          : "border-hairline bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low"
-                      }`}
-                    >
-                      <span>{slot}</span>
-                      {selectedDate === slot && <Check className="w-3.5 h-3.5 text-brass" />}
-                    </button>
-                  ))}
-                </div>
+                <input
+                  type="datetime-local"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  min={new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16)}
+                  className="w-full px-3 py-2.5 rounded-lg border border-hairline bg-surface-container-lowest text-xs text-primary focus:outline-none focus:border-brass transition-colors"
+                />
+                <p className="text-[11px] text-on-surface-variant mt-1.5">
+                  The lawyer will confirm or suggest an alternative time via chat.
+                </p>
               </div>
 
               <div className="p-3 bg-surface-container-low rounded-lg border border-hairline text-xs text-on-surface-variant space-y-1.5">
                 <div className="flex items-center justify-between font-semibold text-primary">
                   <div className="flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-brass" />
-                    <span>30-Minute Consultation</span>
+                    <span>Consultation Request</span>
                   </div>
                   <span className="text-brass">₹{lawyer.hourlyRate.toLocaleString("en-IN")} / hr</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Pre-authorized via Escrow • Zero fee until consultation concludes</span>
+                <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
+                  <ShieldCheck className="w-3.5 h-3.5 text-brass shrink-0" />
+                  <span>Payment arranged directly with counsel after confirmation.</span>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={confirmBooking}
-                className="w-full bg-brass hover:bg-brass-hover text-white text-sm font-semibold py-3.5 rounded-lg shadow-editorial transition-transform active:scale-95 flex items-center justify-center gap-2 min-h-[44px]"
+                disabled={!selectedDate}
+                className="w-full bg-brass hover:bg-brass-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-3.5 rounded-lg shadow-editorial transition-transform active:scale-95 flex items-center justify-center gap-2 min-h-[44px]"
               >
                 <span>Confirm &amp; Open Chat</span>
                 <ArrowRight className="w-4 h-4" />
