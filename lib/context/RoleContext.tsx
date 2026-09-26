@@ -399,7 +399,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const role: UserRole = sessionUser?.role || "public";
   const activeLawyer =
     myLawyerProfile ||
-    (activeLawyerId ? getLawyerById(activeLawyerId) : null);
+    (activeLawyerId ? getLawyerById(activeLawyerId) || null : null);
 
   const currentUser: UserPersona = sessionUser || {
     id: "guest",

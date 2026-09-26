@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-
+import { getLawyerApplication, submitVerificationApplication } from "../lib/supabase/verification";
 
 // Local dev server URL
 const APP_URL = "http://localhost:3000";
@@ -26,7 +26,6 @@ async function runTest() {
   const lawyerId = lawyerAuth.user.id;
   console.log("✅ Logged in successfully. Lawyer ID:", lawyerId);
 
-import { getLawyerApplication, submitVerificationApplication } from "../lib/supabase/verification";
 
   // 2. Submit Application via internal function
   console.log("\n2. Submitting application via internal function...");
