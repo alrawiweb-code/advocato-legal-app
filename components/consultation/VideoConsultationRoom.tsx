@@ -198,17 +198,19 @@ export function VideoConsultationRoom({
     channel
       .on("broadcast", { event: "peer-joined" }, async ({ payload }) => {
         if (payload?.senderId !== currentUserId && pc.signalingState !== "closed") {
-          try {
-            if (isMounted) setParticipantCount(2);
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            channel.send({
-              type: "broadcast",
-              event: "sdp-offer",
-              payload: { offer, senderId: currentUserId },
-            });
-          } catch (e) {
-            console.error("Failed to initiate WebRTC offer on peer-joined:", e);
+          if (isMounted) setParticipantCount(2);
+          if (role === "client") {
+            try {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              channel.send({
+                type: "broadcast",
+                event: "sdp-offer",
+                payload: { offer, senderId: currentUserId },
+              });
+            } catch (e) {
+              console.error("Failed to initiate WebRTC offer on peer-joined:", e);
+            }
           }
         }
       })

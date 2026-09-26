@@ -130,6 +130,8 @@ function MessagesView() {
               category: m.category,
               status: (m.status as any) || "active",
               clientName: m.client?.full_name || "Client",
+              appointmentDate: m.appointment_date,
+              consultationType: m.consultation_type,
               lawyer: {
                 id: m.lawyer?.id || m.lawyer_id,
                 name: counselorName,
@@ -203,27 +205,35 @@ function MessagesView() {
           .order("created_at", { ascending: true });
 
         if (!error && dbMessages && dbMessages.length > 0) {
-          const mappedMsgs: ConsultationMessage[] = dbMessages.map((m: any) => ({
-            id: m.id,
-            senderRole: m.sender_role,
-            senderName: m.sender_role === "lawyer" ? (activeConsultation?.lawyer?.name || "Attorney") : (currentUser.name || "Client"),
-            text: m.text || "",
-            timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            status: "read",
-            document: m.document ? {
-              id: m.document.id,
-              name: m.document.name,
-              size: `${Math.round(m.document.size_bytes / 1024)} KB`,
-              category: m.document.category || "Evidence",
-              previewUrl: m.document.storage_path,
-              downloadUrl: m.document.storage_path,
-              isReviewed: m.document.is_reviewed,
-            } : undefined,
-          }));
+          setConsultations((prev) => {
+            const currentConsultation = prev.find((c) => c.id === activeMatterId);
+            const lawyerName = currentConsultation?.lawyer?.name || "Attorney";
+            const clientName = currentConsultation?.clientName || "Client";
 
-          setConsultations((prev) =>
-            prev.map((c) => (c.id === activeMatterId ? { ...c, messages: mappedMsgs } : c))
-          );
+            const mappedMsgs: ConsultationMessage[] = dbMessages.map((m: any) => ({
+              id: m.id,
+              senderRole: m.sender_role,
+              senderName: m.sender_role === "lawyer" ? lawyerName : clientName,
+              text: m.text || "",
+              timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              status: "read",
+              isVoiceNote: m.is_voice_note || false,
+              audioUrl: m.audio_url || undefined,
+              audioStoragePath: m.audio_storage_path || undefined,
+              audioDuration: m.audio_duration || undefined,
+              document: m.document ? {
+                id: m.document.id,
+                name: m.document.name,
+                size: `${Math.round(m.document.size_bytes / 1024)} KB`,
+                category: m.document.category || "Evidence",
+                previewUrl: m.document.storage_path,
+                downloadUrl: m.document.storage_path,
+                isReviewed: m.document.is_reviewed,
+              } : undefined,
+            }));
+
+            return prev.map((c) => (c.id === activeMatterId ? { ...c, messages: mappedMsgs } : c));
+          });
         }
       } catch (err) {
         console.warn("Could not load messages from DB:", err);
@@ -269,19 +279,28 @@ function MessagesView() {
         (payload) => {
           const r: any = payload.new;
           if (!r) return;
-          const incomingMsg: ConsultationMessage = {
-            id: r.id,
-            senderRole: r.sender_role,
-            senderName: r.sender_role === "lawyer" ? (activeConsultation?.lawyer?.name || "Attorney") : (currentUser.name || "Client"),
-            text: r.text || "",
-            timestamp: new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            status: "read",
-          };
 
-          setConsultations((prev) =>
-            prev.map((c) => {
+          setConsultations((prev) => {
+            const currentConsultation = prev.find((c) => c.id === activeMatterId);
+            const lawyerName = currentConsultation?.lawyer?.name || "Attorney";
+            const clientName = currentConsultation?.clientName || "Client";
+
+            const incomingMsg: ConsultationMessage = {
+              id: r.id,
+              senderRole: r.sender_role,
+              senderName: r.sender_role === "lawyer" ? lawyerName : clientName,
+              text: r.text || "",
+              timestamp: new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              status: "read",
+              isVoiceNote: r.is_voice_note || false,
+              audioUrl: r.audio_url || undefined,
+              audioStoragePath: r.audio_storage_path || undefined,
+              audioDuration: r.audio_duration || undefined,
+            };
+
+            return prev.map((c) => {
               if (c.id === activeMatterId) {
-                if (c.messages.some((m) => m.id === incomingMsg.id || m.text === incomingMsg.text)) return c;
+                if (c.messages.some((m) => m.id === incomingMsg.id || (m.text === incomingMsg.text && m.isVoiceNote === incomingMsg.isVoiceNote && !incomingMsg.isVoiceNote))) return c;
                 return {
                   ...c,
                   messages: [...c.messages, incomingMsg],
@@ -289,8 +308,8 @@ function MessagesView() {
                 };
               }
               return c;
-            })
-          );
+            });
+          });
         }
       )
       .on("broadcast", { event: "typing" }, ({ payload }) => {

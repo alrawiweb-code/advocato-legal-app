@@ -150,28 +150,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           setMyLawyerProfileState(lawyerModel);
           setActiveLawyerIdState(userId);
         } else {
-          const fallbackModel: Lawyer = {
-            id: userId,
-            name: fullName,
-            title: "Advocate",
-            headline: "Legal Specialist",
-            yearsExperience: 5,
-            hourlyRate: 2500,
-            isVerified: false,
-            verificationStatus: "NOT_VERIFIED",
-            availability: "Available today",
-            jurisdiction: userMeta?.jurisdiction || "Delhi (DL)",
-            state: userMeta?.jurisdiction || "Delhi (DL)",
-            languages: ["English", "Hindi"],
-            practiceAreas: ["General Legal Counsel"],
-            tags: [],
-            avatar: profile?.avatar_url || getInitialsAvatar(fullName),
-            bio: "Licensed attorney admitted to the Bar Council.",
-            notableCases: [],
-            rating: 5.0,
-            reviewCount: 0,
-          };
-          setMyLawyerProfileState(fallbackModel);
+          // Do not auto-create a fallback model. The user must complete their profile/verification.
+          setMyLawyerProfileState(null);
           setActiveLawyerIdState(userId);
         }
       }
@@ -353,29 +333,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: "Attorney account creation failed." };
       }
 
-      // Upsert into lawyer_profiles
-      const { error: profileError } = await supabase.from("lawyer_profiles").upsert({
-        id: userId,
-        title: "Advocate",
-        headline: `${data.primaryPractice} Specialist`,
-        bar_number: data.barNumber.trim(),
-        state_bar: data.stateBar,
-        years_experience: 5,
-        hourly_rate: Number(data.hourlyRate) || 2500,
-        is_verified: false,
-        verification_status: "NOT_VERIFIED",
-        availability: "Available today",
-        jurisdiction: data.stateBar,
-        state: data.stateBar,
-        practice_areas: [data.primaryPractice],
-        bio: data.bio.trim() || `Licensed attorney admitted to the Bar Council of ${data.stateBar}.`,
-        rating: 5.0,
-        review_count: 0,
-      });
-
-      if (profileError) {
-        console.warn("Lawyer profile upsert notice:", profileError.message);
-      }
+      // Note: We no longer auto-create the lawyer_profile immediately on sign up.
+      // The user must verify their email and submit their verification documents first.
 
       await hydrateUserProfile(userId, data.email, {
         full_name: data.name,

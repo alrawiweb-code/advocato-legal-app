@@ -193,16 +193,27 @@ export async function submitVerificationApplication(payload: {
       }
     }
 
-    // 3. Update lawyer profile status to PENDING
+    // 3. Upsert lawyer profile status to PENDING
     await supabase
       .from("lawyer_profiles")
-      .update({
+      .upsert({
+        id: payload.lawyerId,
+        title: "Advocate",
+        headline: `${payload.practiceJurisdictions?.[0] || payload.stateBar} Specialist`,
+        jurisdiction: payload.stateBar,
+        state: payload.stateBar,
+        practice_areas: [payload.practiceJurisdictions?.[0] || "General Practice"],
         is_verified: false,
         verification_status: "PENDING",
         bar_number: payload.barNumber.trim(),
         state_bar: payload.stateBar,
-      })
-      .eq("id", payload.lawyerId);
+        years_experience: payload.yearsExperience,
+        hourly_rate: 2500,
+        availability: "Available today",
+        bio: `Licensed attorney admitted to the Bar Council of ${payload.stateBar}.`,
+        rating: 5.0,
+        review_count: 0,
+      });
 
     // 4. Log audit entry
     await supabase.from("verification_audit_logs").insert({

@@ -168,52 +168,41 @@ export default function LawyerRegistrationPage() {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800">
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-                <span>Verification Onboarding Required</span>
+                <span>Email Verification Required</span>
               </div>
               <h2 className="font-headline text-2xl sm:text-3xl font-semibold text-primary">
-                Profile Registered!
+                Check Your Inbox
               </h2>
               <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-                Thank you, <strong>{formData.fullName}</strong>. Your profile has been drafted. To unlock client cases, privileged briefs, and client matching, please submit your Bar Council verification credentials.
+                Thank you, <strong>{formData.fullName}</strong>. We've sent a verification link to your email address. Please click the link to verify your email and continue setting up your profile.
               </p>
             </div>
 
             {/* Profile Recap Card */}
             <div className="p-4 bg-surface-container-low rounded-xl border border-hairline text-left text-xs space-y-2.5">
               <div className="flex justify-between pb-1.5 border-b border-hairline text-on-surface-variant">
+                <span>Email Address</span>
+                <span className="font-semibold text-primary">{formData.email}</span>
+              </div>
+              <div className="flex justify-between pb-1.5 border-b border-hairline text-on-surface-variant">
                 <span>Practice Area</span>
                 <span className="font-semibold text-primary">{formData.primaryPractice}</span>
-              </div>
-              <div className="flex justify-between pb-1.5 border-b border-hairline text-on-surface-variant">
-                <span>Consultation Rate</span>
-                <span className="font-semibold text-primary">₹{Number(formData.hourlyRate || 0).toLocaleString("en-IN")} / hr</span>
-              </div>
-              <div className="flex justify-between pb-1.5 border-b border-hairline text-on-surface-variant">
-                <span>State License</span>
-                <span className="font-semibold text-primary">{formData.stateBar} ({formData.barNumber})</span>
               </div>
               <div className="flex justify-between text-on-surface-variant">
                 <span>Verification Status</span>
                 <span className="font-semibold text-amber-700 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                  Apply for Verification
+                  Pending Email Confirmation
                 </span>
               </div>
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-3">
               <Link
-                href="/lawyer/verify"
-                className="flex-1 bg-brass hover:bg-brass-hover text-white py-3 px-4 rounded-lg text-xs font-semibold shadow-sm transition-all text-center flex items-center justify-center gap-1.5 min-h-[44px]"
+                href="/login"
+                className="flex-1 bg-brass hover:bg-brass-hover text-white py-3 px-4 rounded-lg text-xs font-semibold shadow-sm transition-all text-center flex items-center justify-center min-h-[44px]"
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Submit Verification Documents</span>
-              </Link>
-              <Link
-                href="/"
-                className="flex-1 bg-transparent border border-primary text-primary hover:bg-surface-container-low py-3 px-4 rounded-lg text-xs font-semibold transition-colors text-center flex items-center justify-center min-h-[44px]"
-              >
-                Go to Dashboard
+                Go to Login
               </Link>
             </div>
 
