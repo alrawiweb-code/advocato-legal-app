@@ -55,7 +55,7 @@ interface RoleContextType {
   isSupabaseConnected: boolean;
   login: (credentials: LoginCredentials) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  registerClient: (data: { name: string; email: string; password?: string }) => Promise<{ success: boolean; error?: string }>;
+  registerClient: (data: { name: string; email: string; password?: string; captchaToken?: string }) => Promise<{ success: boolean; error?: string }>;
   registerLawyer: (data: {
     name: string;
     email: string;
@@ -65,6 +65,7 @@ interface RoleContextType {
     hourlyRate: number | string;
     bio: string;
     password?: string;
+    captchaToken?: string;
   }) => Promise<{ success: boolean; error?: string }>;
   setRole: (role: UserRole) => void;
   toggleRole: () => void;
@@ -261,11 +262,25 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const registerClient = async (data: { name: string; email: string; password?: string }) => {
+  const registerClient = async (data: { name: string; email: string; password?: string; captchaToken?: string }) => {
     try {
       if (!data.password) {
         return { success: false, error: "A secure password is required to create an account." };
       }
+
+      // --- Server-side Turnstile siteverify (gate before Supabase) ---
+      if (data.captchaToken) {
+        const verifyRes = await fetch("/api/verify-captcha", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: data.captchaToken, action: "client-signup" }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          return { success: false, error: "CAPTCHA verification failed. Please try again." };
+        }
+      }
+      // ----------------------------------------------------------------
 
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email.trim(),
@@ -305,11 +320,26 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     hourlyRate: number | string;
     bio: string;
     password?: string;
+    captchaToken?: string;
   }) => {
     try {
       if (!data.password) {
         return { success: false, error: "A password is required for attorney registration." };
       }
+
+      // --- Server-side Turnstile siteverify (gate before Supabase) ---
+      if (data.captchaToken) {
+        const verifyRes = await fetch("/api/verify-captcha", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: data.captchaToken, action: "lawyer-signup" }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          return { success: false, error: "CAPTCHA verification failed. Please try again." };
+        }
+      }
+      // ----------------------------------------------------------------
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email.trim(),

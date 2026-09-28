@@ -4,14 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, ShieldCheck, Scale, FileCheck, IndianRupee, Building2, Gavel, AlertCircle, Loader2 } from "lucide-react";
 import { INDIAN_STATES } from "@/lib/data/lawyers";
-import { Lawyer } from "@/types";
 import { useUserRole } from "@/lib/context/RoleContext";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+import { CaptchaWidget } from "@/components/ui/CaptchaWidget";
 
 export default function LawyerRegistrationPage() {
   const { registerLawyer } = useUserRole();
   const [step, setStep] = useState<number>(0); // 0 = Landing, 1 = Personal, 2 = Bar credentials, 3 = Pricing, 4 = Submitted
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -30,8 +32,12 @@ export default function LawyerRegistrationPage() {
     setErrorMessage(null);
 
     if (step === 3) {
-      if (!formData.password || formData.password.length < 6) {
-        setErrorMessage("Please enter a secure password of at least 6 characters.");
+      if (!formData.password || formData.password.length < 8) {
+        setErrorMessage("Please enter a secure password of at least 8 characters.");
+        return;
+      }
+      if (!captchaToken) {
+        setErrorMessage("Please wait for CAPTCHA verification to complete.");
         return;
       }
 
@@ -46,6 +52,7 @@ export default function LawyerRegistrationPage() {
           hourlyRate: Number(formData.hourlyRate) || 2500,
           bio: formData.bio.trim() || `Licensed advocate admitted to ${formData.stateBar} specializing in ${formData.primaryPractice}.`,
           password: formData.password,
+          captchaToken: captchaToken ?? undefined,
         });
 
         if (res.success) {
@@ -392,18 +399,25 @@ export default function LawyerRegistrationPage() {
                     <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface mb-1">
                       Account Password
                     </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="Minimum 6 characters"
+                    <PasswordInput
                       value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full bg-surface border border-hairline rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:border-slate focus:outline-none"
+                      onChange={(v) => setFormData({ ...formData, password: v })}
+                      placeholder="Minimum 8 characters"
+                      required
+                      minLength={8}
+                      showStrength
+                      inputClassName="w-full pl-9 pr-10 bg-surface border border-hairline rounded-lg py-2.5 text-sm text-on-surface focus:border-slate focus:outline-none"
                     />
                     <p className="text-[11px] text-on-surface-variant mt-1">
                       You will use this password to sign in to your attorney portal.
                     </p>
                   </div>
+
+                  <CaptchaWidget
+                    action="lawyer-signup"
+                    onVerify={(token) => setCaptchaToken(token)}
+                    onExpire={() => setCaptchaToken(null)}
+                  />
                 </>
               )}
 

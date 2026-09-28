@@ -25,7 +25,7 @@ import {
 import { getOrCreateConsultationForLawyer } from "@/lib/data/consultations";
 import { createOrGetMatter } from "@/lib/supabase/matters";
 import { Lawyer, IntakeAssessment, LawyerReview } from "@/types";
-import { useUserRole } from "@/lib/context/RoleContext";
+import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import StarRating from "@/components/marketplace/StarRating";
 import ReviewsList from "@/components/marketplace/ReviewsList";
 
@@ -294,7 +294,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
               {/* Avatar */}
               <div className="relative -mt-16 sm:-mt-20 shrink-0">
                 <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 border-surface-lowest bg-surface-container-low overflow-hidden shadow-sm">
-                  <img src={lawyer.avatar} alt={lawyer.name} className="w-full h-full object-cover" />
+                  <img src={lawyer.avatar || getInitialsAvatar(lawyer.name)} alt={lawyer.name} className="w-full h-full object-cover" />
                 </div>
                 {lawyer.isVerified && (
                   <div className="absolute bottom-2 right-2 bg-white rounded-full p-0.5 shadow-sm">
@@ -549,7 +549,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
             <div className="flex items-center gap-4 mb-5 pb-4 border-b border-hairline">
               <img
-                src={lawyer.avatar}
+                src={lawyer.avatar || getInitialsAvatar(lawyer.name)}
                 alt={lawyer.name}
                 className="w-14 h-14 rounded-full object-cover border border-hairline"
               />
@@ -650,7 +650,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-surface-container-lowest border border-hairline rounded-xl mb-2">
                 <img 
-                  src={avatarPreview || lawyer.avatar} 
+                  src={avatarPreview || lawyer.avatar || getInitialsAvatar(lawyer.name)} 
                   alt="Profile Preview" 
                   className="w-16 h-16 rounded-full object-cover border border-hairline"
                 />

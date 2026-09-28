@@ -17,7 +17,7 @@ BEGIN
     new.email,
     v_full_name,
     v_role,
-    COALESCE(new.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400')
+    new.raw_user_meta_data->>'avatar_url'
   )
   ON CONFLICT (id) DO UPDATE SET
     full_name = EXCLUDED.full_name,

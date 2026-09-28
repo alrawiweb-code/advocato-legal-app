@@ -72,7 +72,16 @@ export function getCustomLawyers(): Lawyer[] {
   if (typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(LAWYER_STORAGE_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Lawyer[];
+        // Security: never trust verification state from localStorage.
+        // Real verification is always sourced from Supabase.
+        return parsed.map((l) => ({
+          ...l,
+          isVerified: false,
+          verificationStatus: "NOT_VERIFIED" as const,
+        }));
+      }
     } catch (e) {
       console.error("Failed to load registered lawyers from storage", e);
     }
@@ -108,8 +117,7 @@ export function registerNewLawyer(data: {
       ? parseFloat(data.hourlyRate.replace(/[^0-9.]/g, "")) || 2500
       : data.hourlyRate;
 
-  const defaultAvatar =
-    "https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400";
+  const defaultAvatar = "";
 
   const newLawyer: Lawyer = {
     id,

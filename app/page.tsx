@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { getAllLawyers } from "@/lib/data/lawyers";
 import { getStoredConsultations } from "@/lib/data/consultations";
-import { useUserRole } from "@/lib/context/RoleContext";
+import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import { Lawyer, Consultation } from "@/types";
 import { getUserMatters } from "@/lib/supabase/matters";
 import { VerificationModal } from "@/components/lawyer/VerificationModal";
@@ -616,7 +616,7 @@ function ClientHomeView() {
                     <div>
                       <div className="flex items-center gap-3.5 pb-3 border-b border-hairline">
                         <img
-                          src={lawyer.avatar}
+                          src={lawyer.avatar || getInitialsAvatar(lawyer.name)}
                           alt={lawyer.name}
                           className="w-12 h-12 rounded-full object-cover border border-hairline"
                         />
@@ -688,9 +688,9 @@ function ClientHomeView() {
 }
 
 export default function HomePage() {
-  const { role } = useUserRole();
+  const { role, isAuthenticated } = useUserRole();
 
-  if (role === "lawyer") {
+  if (isAuthenticated && role === "lawyer") {
     return <LawyerDashboardView />;
   }
 

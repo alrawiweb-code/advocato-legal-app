@@ -5,16 +5,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Scale,
   ShieldCheck,
-  Lock,
   Mail,
   User,
   ArrowRight,
   Briefcase,
   CheckCircle2,
   AlertCircle,
-  Key,
 } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+import { CaptchaWidget } from "@/components/ui/CaptchaWidget";
 import { INDIAN_STATES } from "@/lib/data/lawyers";
 
 function LoginFormContent() {
@@ -35,6 +35,10 @@ function LoginFormContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // CAPTCHA tokens
+  const [captchaTokenClient, setCaptchaTokenClient] = useState<string | null>(null);
+  const [captchaTokenLawyer, setCaptchaTokenLawyer] = useState<string | null>(null);
 
   // Client registration state
   const [clientName, setClientName] = useState("");
@@ -82,8 +86,12 @@ function LoginFormContent() {
       setErrorMessage("Please complete all required registration fields.");
       return;
     }
-    if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters long.");
+    if (password.length < 8) {
+      setErrorMessage("Password must be at least 8 characters long.");
+      return;
+    }
+    if (!captchaTokenClient) {
+      setErrorMessage("Please wait for CAPTCHA verification to complete.");
       return;
     }
     setErrorMessage(null);
@@ -95,12 +103,13 @@ function LoginFormContent() {
         name: clientName.trim(),
         email: email.trim(),
         password: password,
+        captchaToken: captchaTokenClient,
       });
       if (res.success) {
-        setSuccessMessage("Client account registered successfully! Redirecting...");
-        setTimeout(() => {
-          router.push(redirectTarget);
-        }, 1200);
+        setSuccessMessage(
+          `Account created. A verification link has been sent to ${email.trim()}. Please check your inbox and click the link to activate your account.`
+        );
+        // Stay on page — do not redirect until email is confirmed
       } else {
         setErrorMessage(res.error || "Client registration failed.");
       }
@@ -117,8 +126,12 @@ function LoginFormContent() {
       setErrorMessage("Please fill in your name, email, bar number, and password.");
       return;
     }
-    if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters long.");
+    if (password.length < 8) {
+      setErrorMessage("Password must be at least 8 characters long.");
+      return;
+    }
+    if (!captchaTokenLawyer) {
+      setErrorMessage("Please wait for CAPTCHA verification to complete.");
       return;
     }
     setErrorMessage(null);
@@ -135,12 +148,13 @@ function LoginFormContent() {
         hourlyRate: Number(hourlyRate) || 2500,
         bio: bio.trim() || `Licensed attorney admitted to ${stateBar} specializing in ${primaryPractice}.`,
         password: password,
+        captchaToken: captchaTokenLawyer,
       });
       if (res.success) {
-        setSuccessMessage("Attorney profile created and admitted! Redirecting to dashboard...");
-        setTimeout(() => {
-          router.push(redirectTarget);
-        }, 1200);
+        setSuccessMessage(
+          `Account created. A verification link has been sent to ${email.trim()}. Please check your inbox, confirm your email, then complete bar verification to activate your profile.`
+        );
+        // Stay on page — do not redirect until email is confirmed
       } else {
         setErrorMessage(res.error || "Lawyer registration failed.");
       }
@@ -281,17 +295,12 @@ function LoginFormContent() {
                 <label className="text-xs font-semibold text-primary block">
                   Password
                 </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-on-surface-variant absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50"
-                  />
-                </div>
+                <PasswordInput
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="••••••••••••"
+                  required
+                />
               </div>
 
               <button
@@ -366,19 +375,21 @@ function LoginFormContent() {
                 <label className="text-xs font-semibold text-primary block">
                   Password
                 </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-on-surface-variant absolute left-3 top-3" />
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 6 characters"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50"
-                  />
-                </div>
+                <PasswordInput
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="Min 8 characters"
+                  required
+                  minLength={8}
+                  showStrength
+                />
               </div>
+
+              <CaptchaWidget
+                action="client-signup"
+                onVerify={(token) => setCaptchaTokenClient(token)}
+                onExpire={() => setCaptchaTokenClient(null)}
+              />
 
               <button
                 type="submit"
@@ -502,14 +513,13 @@ function LoginFormContent() {
                 <label className="text-xs font-semibold text-primary block">
                   Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
+                <PasswordInput
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50"
+                  onChange={setPassword}
+                  placeholder="Min 8 characters"
+                  required
+                  minLength={8}
+                  showStrength
                 />
               </div>
 
@@ -525,6 +535,12 @@ function LoginFormContent() {
                   className="w-full px-3 py-2 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50 resize-none"
                 />
               </div>
+
+              <CaptchaWidget
+                action="lawyer-signup"
+                onVerify={(token) => setCaptchaTokenLawyer(token)}
+                onExpire={() => setCaptchaTokenLawyer(null)}
+              />
 
               <button
                 type="submit"

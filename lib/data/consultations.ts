@@ -77,7 +77,7 @@ export function getOrCreateConsultationForLawyer(
     name: "Assigned Counsel",
     title: "Advocate",
     headline: "Legal Specialist",
-    avatar: "https://images.unsplash.com/photo-1556157382-97eda2d62296?auto=format&fit=crop&q=80&w=400",
+    avatar: "",
     rating: 5.0,
     reviewCount: 0,
     hourlyRate: 2500,

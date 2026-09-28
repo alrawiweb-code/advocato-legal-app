@@ -111,6 +111,28 @@ export async function submitVerificationApplication(payload: {
   const supabase = createClient();
 
   try {
+    // 0. Upsert lawyer profile status to PENDING (must happen before creating verification app to satisfy FK)
+    await supabase
+      .from("lawyer_profiles")
+      .upsert({
+        id: payload.lawyerId,
+        title: "Advocate",
+        headline: `${payload.practiceJurisdictions?.[0] || payload.stateBar} Specialist`,
+        jurisdiction: payload.stateBar,
+        state: payload.stateBar,
+        practice_areas: [payload.practiceJurisdictions?.[0] || "General Practice"],
+        is_verified: false,
+        verification_status: "PENDING",
+        bar_number: payload.barNumber.trim(),
+        state_bar: payload.stateBar,
+        years_experience: payload.yearsExperience,
+        hourly_rate: 2500,
+        availability: "Available today",
+        bio: `Licensed attorney admitted to the Bar Council of ${payload.stateBar}.`,
+        rating: 5.0,
+        review_count: 0,
+      });
+
     // 1. Check existing draft or pending application
     const { data: existingApp } = await supabase
       .from("lawyer_verification_applications")
@@ -192,28 +214,6 @@ export async function submitVerificationApplication(payload: {
         console.error("Document record error:", docInsertErr);
       }
     }
-
-    // 3. Upsert lawyer profile status to PENDING
-    await supabase
-      .from("lawyer_profiles")
-      .upsert({
-        id: payload.lawyerId,
-        title: "Advocate",
-        headline: `${payload.practiceJurisdictions?.[0] || payload.stateBar} Specialist`,
-        jurisdiction: payload.stateBar,
-        state: payload.stateBar,
-        practice_areas: [payload.practiceJurisdictions?.[0] || "General Practice"],
-        is_verified: false,
-        verification_status: "PENDING",
-        bar_number: payload.barNumber.trim(),
-        state_bar: payload.stateBar,
-        years_experience: payload.yearsExperience,
-        hourly_rate: 2500,
-        availability: "Available today",
-        bio: `Licensed attorney admitted to the Bar Council of ${payload.stateBar}.`,
-        rating: 5.0,
-        review_count: 0,
-      });
 
     // 4. Log audit entry
     await supabase.from("verification_audit_logs").insert({
