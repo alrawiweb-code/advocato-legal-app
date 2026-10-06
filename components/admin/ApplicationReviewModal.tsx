@@ -43,6 +43,9 @@ export function ApplicationReviewModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Admission Pricing state
+  const [assignedRate, setAssignedRate] = useState<number>(2500);
+
   // Rejection Form state
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -81,11 +84,18 @@ export function ApplicationReviewModal({
     setIsProcessing(true);
     setActionError(null);
 
+    if (assignedRate <= 0) {
+      setActionError("Please assign a valid hourly rate greater than 0.");
+      setIsProcessing(false);
+      return;
+    }
+
     try {
       const res = await approveLawyerApplication(
         appDetail.id,
         appDetail.lawyer_id,
-        currentUser.id
+        currentUser.id,
+        assignedRate
       );
 
       if (!res.success) {
@@ -345,12 +355,29 @@ export function ApplicationReviewModal({
 
         {/* Modal Footer / Actions */}
         {appDetail && (
-          <div className="p-6 border-t border-hairline bg-surface-container-low/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="text-xs text-on-surface-variant flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-brass" />
-              <span>
-                Submitted: {appDetail.submitted_at ? new Date(appDetail.submitted_at).toLocaleDateString() : "Pending"}
-              </span>
+          <div className="p-6 border-t border-hairline bg-surface-container-low/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="text-xs text-on-surface-variant flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-brass" />
+                <span>
+                  Submitted: {appDetail.submitted_at ? new Date(appDetail.submitted_at).toLocaleDateString() : "Pending"}
+                </span>
+              </div>
+              
+              {/* Assigned Rate Input for Approval */}
+              {appDetail.status !== "APPROVED" && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="font-semibold text-primary">Assign Rate (₹/hr):</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={assignedRate}
+                    onChange={(e) => setAssignedRate(Number(e.target.value))}
+                    className="w-24 bg-surface border border-hairline rounded px-2 py-1 text-xs text-primary focus:border-brass focus:outline-none"
+                    placeholder="e.g. 2500"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3 self-end sm:self-auto">

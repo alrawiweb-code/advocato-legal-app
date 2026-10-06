@@ -151,7 +151,6 @@ export async function PATCH(
     const name = formData.get("name") as string | null;
     const title = formData.get("title") as string | null;
     const headline = formData.get("headline") as string | null;
-    const hourlyRate = formData.get("hourlyRate") as string | null;
     const jurisdiction = formData.get("jurisdiction") as string | null;
     const bio = formData.get("bio") as string | null;
     const avatarFile = formData.get("avatar") as File | null;
@@ -191,7 +190,6 @@ export async function PATCH(
     const lawyerUpdates: any = {};
     if (title !== null) lawyerUpdates.title = title;
     if (headline !== null) lawyerUpdates.headline = headline;
-    if (hourlyRate !== null) lawyerUpdates.hourly_rate = Number(hourlyRate);
     if (jurisdiction !== null) lawyerUpdates.jurisdiction = jurisdiction;
     if (bio !== null) lawyerUpdates.bio = bio;
 

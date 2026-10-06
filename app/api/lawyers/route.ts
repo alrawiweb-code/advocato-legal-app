@@ -47,7 +47,9 @@ export async function GET(request: Request) {
       if (minExperience > 0) query = query.gte("years_experience", minExperience);
       if (maxExperience < 40) query = query.lte("years_experience", maxExperience);
       if (language !== "all") query = query.contains("languages", [language]);
-      // verifiedOnly is now implied, no need to add another filter
+      
+      // Strict Marketplace Eligibility Rule: must have a valid positive hourly rate
+      query = query.gt("hourly_rate", 0);
       
       if (availability === "today") {
          query = query.eq("availability", "Available today");
@@ -111,6 +113,7 @@ export async function GET(request: Request) {
         state: l.state,
         languages: l.languages,
         practiceAreas: l.practice_areas,
+        hourlyRate: l.hourly_rate,
         primaryServices: l.service_ids ? l.service_ids.slice(0, 3) : [],
         ratingSummary: computeRatingSummary(l.computed_rating, l.total_review_count, l.total_verified_review_count),
         tags: l.tags

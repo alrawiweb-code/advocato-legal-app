@@ -30,6 +30,7 @@ import { Lawyer, IntakeAssessment, LawyerReview } from "@/types";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import StarRating from "@/components/marketplace/StarRating";
 import ReviewsList from "@/components/marketplace/ReviewsList";
+import { PriceRequestModal } from "@/components/lawyer/PriceRequestModal";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -59,6 +60,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   // Edit Profile Modal State (for lawyers)
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [showPriceRequestModal, setShowPriceRequestModal] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
     title: "",
@@ -615,6 +617,15 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                 </li>
               </ul>
 
+              {isOwnProfile && (
+                <button 
+                  onClick={() => setShowPriceRequestModal(true)} 
+                  className="w-full mt-4 bg-surface hover:bg-surface-container-low border border-hairline text-primary py-2.5 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
+                >
+                  Request Rate Change
+                </button>
+              )}
+
               {!isOwnProfile && (
                 <button onClick={handleOpenBooking} className="w-full mt-6 bg-brass text-white py-3 rounded-lg text-sm font-semibold hover:bg-brass-hover transition-colors shadow-sm btn-editorial-brass">
                   Request Consultation
@@ -822,8 +833,11 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Hourly Rate (₹)</label>
-                  <input type="number" value={editForm.hourlyRate} onChange={(e) => setEditForm({...editForm, hourlyRate: Number(e.target.value)})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
+                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Official Hourly Rate</label>
+                  <div className="w-full bg-surface-container-low border border-hairline rounded-lg px-3 py-2 text-sm text-on-surface-variant font-medium flex items-center justify-between">
+                    <span>₹{editForm.hourlyRate.toLocaleString("en-IN")}/hr</span>
+                    <span className="text-[10px] uppercase tracking-wider text-brass font-bold">Admin Managed</span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-on-surface mb-1.5">Jurisdiction / State Bar</label>
@@ -847,6 +861,14 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
         </div>
       )}
 
+      {/* Price Request Modal */}
+      {showPriceRequestModal && lawyer && (
+        <PriceRequestModal
+          isOpen={showPriceRequestModal}
+          onClose={() => setShowPriceRequestModal(false)}
+          currentRate={lawyer.hourlyRate}
+        />
+      )}
     </div>
   );
 }

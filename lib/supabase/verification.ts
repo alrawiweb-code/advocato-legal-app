@@ -337,7 +337,8 @@ export async function getAdminApplicationDetail(applicationId: string): Promise<
 export async function approveLawyerApplication(
   applicationId: string,
   lawyerId: string,
-  adminId: string
+  adminId: string,
+  assignedRate: number
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = getAdminClient();
 
@@ -355,12 +356,13 @@ export async function approveLawyerApplication(
 
     if (appErr) throw appErr;
 
-    // 2. Update lawyer profile to is_verified: true, status: 'VERIFIED'
+    // 2. Update lawyer profile to is_verified: true, status: 'VERIFIED', and apply the official hourly_rate
     const { error: lawyerErr } = await supabase
       .from("lawyer_profiles")
       .update({
         is_verified: true,
         verification_status: "VERIFIED",
+        hourly_rate: assignedRate,
       })
       .eq("id", lawyerId);
 

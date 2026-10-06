@@ -22,7 +22,6 @@ export default function LawyerRegistrationPage() {
     stateBar: "Delhi (DL)",
     yearsExperience: "10+",
     primaryPractice: "Employment & Labor Law",
-    hourlyRate: "2500",
     bio: "",
     password: "",
   });
@@ -49,7 +48,6 @@ export default function LawyerRegistrationPage() {
           barNumber: formData.barNumber.trim(),
           stateBar: formData.stateBar,
           primaryPractice: formData.primaryPractice,
-          hourlyRate: Number(formData.hourlyRate) || 2500,
           bio: formData.bio.trim() || `Licensed advocate admitted to ${formData.stateBar} specializing in ${formData.primaryPractice}.`,
           password: formData.password,
           captchaToken: captchaToken ?? undefined,
@@ -225,7 +223,6 @@ export default function LawyerRegistrationPage() {
                     stateBar: "Delhi (DL)",
                     yearsExperience: "10+",
                     primaryPractice: "Employment & Labor Law",
-                    hourlyRate: "2500",
                     bio: "",
                     password: "",
                   });
@@ -246,7 +243,7 @@ export default function LawyerRegistrationPage() {
             <div className="flex items-center justify-between text-xs text-on-surface-variant font-semibold mb-6">
               <span>Step {step} of 3</span>
               <span className="text-brass">
-                {step === 1 ? "Contact Details" : step === 2 ? "License & State" : "Rates & Bio"}
+                {step === 1 ? "Contact Details" : step === 2 ? "License & State" : "Bio & Password"}
               </span>
             </div>
             <div className="w-full h-1 bg-surface-container rounded-full mb-6 overflow-hidden">
@@ -362,23 +359,18 @@ export default function LawyerRegistrationPage() {
 
               {step === 3 && (
                 <>
-                  <h2 className="font-headline text-xl font-semibold text-primary mb-1">Rates &amp; Bio</h2>
-                  <p className="text-xs text-on-surface-variant mb-4">Set your hourly fee and a brief description for clients.</p>
+                  <h2 className="font-headline text-xl font-semibold text-primary mb-1">Bio &amp; Password</h2>
+                  <p className="text-xs text-on-surface-variant mb-4">Provide a brief description for clients and secure your account.</p>
 
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface mb-1">
-                      Hourly Consultation Rate (₹ INR)
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-2.5 text-sm text-on-surface-variant font-medium">₹</span>
-                      <input
-                        type="number"
-                        required
-                        placeholder="2500"
-                        value={formData.hourlyRate}
-                        onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                        className="w-full bg-surface border border-hairline rounded-lg pl-8 pr-3.5 py-2.5 text-sm text-on-surface focus:border-slate focus:outline-none tabular-nums"
-                      />
+                  <div className="mb-4">
+                    <div className="p-3 bg-surface-container-low border border-hairline rounded-lg flex items-start gap-2.5">
+                      <IndianRupee className="w-4 h-4 text-brass mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-primary">Hourly Consultation Rate</p>
+                        <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                          Your official consultation rate will be assigned by the Admissions Desk during verification.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
