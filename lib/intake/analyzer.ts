@@ -1,5 +1,5 @@
 import { IntakeAssessment } from "@/types";
-import { getAllLawyers } from "@/lib/data/lawyers";
+
 
 export function analyzeLegalSituation(text: string): IntakeAssessment {
   const lower = text.toLowerCase();
@@ -85,7 +85,7 @@ export function analyzeLegalSituation(text: string): IntakeAssessment {
   }
 
   // Pick matching lawyers
-  const matchedLawyerIds = getAllLawyers().map((l) => l.id);
+  const matchedLawyerIds: string[] = [];
 
   return {
     id: `intake-${Date.now()}`,

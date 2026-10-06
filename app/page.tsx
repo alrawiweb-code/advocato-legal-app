@@ -16,13 +16,14 @@ import {
   UserCheck,
   RefreshCw,
 } from "lucide-react";
-import { getAllLawyers } from "@/lib/data/lawyers";
+import { formatAdvocateName } from "@/lib/utils/formatters";
 import { getStoredConsultations } from "@/lib/data/consultations";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import { Lawyer, Consultation } from "@/types";
 import { getUserMatters } from "@/lib/supabase/matters";
 import { VerificationModal } from "@/components/lawyer/VerificationModal";
 import { SuspensionInquiryPanel } from "@/components/lawyer/SuspensionInquiryPanel";
+import { DynamicHeadline } from "@/components/home/DynamicHeadline";
 
 function LawyerDashboardView() {
   const { activeLawyer, currentUser } = useUserRole();
@@ -52,7 +53,7 @@ function LawyerDashboardView() {
     loadStats();
   }, [activeLawyer]);
 
-  const attorneyName = activeLawyer?.name || currentUser.name || "Counsel";
+  const attorneyName = formatAdvocateName(activeLawyer?.name || currentUser.name || "Counsel");
   const jurisdiction = activeLawyer?.jurisdiction || "State Bar Licensed";
   const practiceArea = activeLawyer?.practiceAreas?.[0] || activeLawyer?.title || "General Legal Counsel";
 
@@ -393,7 +394,12 @@ function ClientHomeView() {
   const isAdmin = role === "admin" || currentUser.email === "alrawiweb@gmail.com";
 
   useEffect(() => {
-    setLawyers(getAllLawyers());
+    fetch("/api/lawyers")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.lawyers) setLawyers(data.lawyers);
+      })
+      .catch((err) => console.error("Failed to fetch lawyers:", err));
   }, []);
 
   return (
@@ -416,58 +422,43 @@ function ClientHomeView() {
           </div>
         )}
 
-        {/* Reassuring Eyebrow */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-low border border-hairline mb-5 sm:mb-8 text-[11px] font-semibold tracking-wider uppercase text-primary shadow-2xs">
-          <Scale className="w-3.5 h-3.5 text-brass" />
-          <span>Trusted Legal Help • 100% Confidential • Licensed State Bar Attorneys</span>
+        {/* Reassuring Eyebrow - Trust Signal First */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-lowest border-2 border-primary mb-6 sm:mb-8 text-[11px] font-bold tracking-wider uppercase text-primary shadow-sm">
+          <ShieldCheck className="w-4 h-4 text-brass" />
+          <span>100% Confidential • Bar Council Verified Advocates</span>
         </div>
 
-        {/* Hero Typography */}
-        <div className="text-center space-y-4 max-w-3xl mx-auto">
-          <h1 className="font-headline text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-primary font-semibold tracking-tight leading-[1.12]">
-            Have a problem at work
-            <br />
-            <span className="text-on-surface-variant font-normal text-xl sm:text-2xl md:text-3xl lg:text-4xl">
-              or with a contract?
-            </span>
-          </h1>
-          <p className="text-on-surface-variant text-xs sm:text-sm md:text-base max-w-2xl mx-auto pt-1 sm:pt-2 font-normal leading-relaxed">
-            Explain what happened in plain English. We match you with verified, licensed attorneys ready to help today. Free consultation matching, zero commitment.
-          </p>
-        </div>
+        {/* Multilingual Hero Typography */}
+        <DynamicHeadline />
 
-        {/* Streamlined Action Buttons */}
-        <div className="w-full max-w-md mx-auto flex flex-col sm:flex-row gap-3.5 pt-6 sm:pt-8">
+        <p className="text-on-surface-variant text-sm sm:text-base max-w-2xl mx-auto pt-4 sm:pt-6 font-normal leading-relaxed text-center">
+          Tell us your situation securely. We match you with the right verified lawyer for your case, across any state in India.
+        </p>
+
+        {/* Streamlined Action Buttons - Two Core Paths */}
+        <div className="w-full max-w-2xl mx-auto flex flex-col sm:flex-row gap-4 pt-8 sm:pt-10">
           <Link
             href="/intake"
-            className="flex-1 bg-primary hover:bg-slate-dark text-white font-semibold text-xs sm:text-sm rounded-lg py-3.5 px-7 flex items-center justify-center gap-2 shadow-sm hover:shadow-md btn-editorial group min-h-[48px]"
+            className="flex-1 bg-primary hover:bg-[#111111] text-white font-semibold text-sm rounded-lg py-4 px-7 flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all group min-h-[56px]"
           >
-            <span>Start Free Case Review</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            <MessageSquare className="w-4 h-4" />
+            <span>Explain My Problem (Guided)</span>
           </Link>
 
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById("how-it-works");
-              if (el) {
-                el.scrollIntoView({ behavior: "smooth" });
-              }
-            }}
-            className="flex-1 bg-surface border border-hairline hover:bg-surface-container text-primary font-semibold text-xs sm:text-sm rounded-lg py-3.5 px-7 flex items-center justify-center gap-1.5 btn-editorial-secondary min-h-[48px]"
+          <Link
+            href="/lawyers"
+            className="flex-1 bg-surface-container-lowest border-2 border-outline-variant hover:border-primary text-primary font-semibold text-sm rounded-lg py-4 px-7 flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md min-h-[56px]"
           >
-            <span>How Matching Works</span>
-            <ArrowRight className="w-4 h-4 text-on-surface-variant" />
-          </button>
+            <UserCheck className="w-4 h-4" />
+            <span>Browse Lawyers (Self-Serve)</span>
+          </Link>
         </div>
 
-        <div className="text-center mt-4 sm:mt-5">
-          <Link
-            href="/lawyer/register"
-            className="inline-flex items-center gap-1 text-xs font-medium text-on-surface-variant hover:text-primary transition-colors underline underline-offset-4"
-          >
-            <span>Are you a licensed attorney? Join our verified network &rarr;</span>
-          </Link>
+        <div className="mt-8 text-xs text-on-surface-variant flex items-center gap-5 flex-wrap justify-center font-medium">
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-brass" /> Family Law</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-brass" /> Property</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-brass" /> Employment</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-brass" /> Criminal Defense</span>
         </div>
 
         {/* How It Works Section */}
@@ -486,7 +477,7 @@ function ClientHomeView() {
                     </h2>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded bg-surface-container-low border border-hairline text-slate">
-                    Fast &amp; Free
+                    Fast &amp; Free Match
                   </span>
                 </div>
 
@@ -500,7 +491,7 @@ function ClientHomeView() {
                         Tell us what happened
                       </h3>
                       <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                        Explain your situation in plain English. Attach any contracts, letters, or emails if you have them. No legal knowledge needed.
+                        Explain your situation safely and privately. No complicated legal jargon needed.
                       </p>
                     </div>
                   </div>
@@ -514,7 +505,7 @@ function ClientHomeView() {
                         We find the right lawyer
                       </h3>
                       <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                        Our system reviews your situation and matches you with verified attorneys who specialize in your exact issue in your state.
+                        Our system matches you with highly-rated advocates who specialize in your exact issue in your state.
                       </p>
                     </div>
                   </div>
@@ -528,7 +519,7 @@ function ClientHomeView() {
                         Connect and talk directly
                       </h3>
                       <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                        See upfront hourly prices, read why each lawyer is a great fit, and start a private chat or video call right from your phone.
+                        See upfront prices, read verified reviews, and start a private consultation without confusion.
                       </p>
                     </div>
                   </div>
@@ -547,15 +538,16 @@ function ClientHomeView() {
               </div>
             </div>
 
-            {/* Right Column (5 cols): Trust & Safety */}
+            {/* Right Column (5 cols): Trust & Safety (Advocato Standard) */}
             <div className="lg:col-span-5 flex flex-col gap-4">
-              <div className="bg-surface-container-lowest p-6 rounded-lg border border-hairline shadow-xs flex-1 flex flex-col justify-center">
+              <div className="bg-surface-container-lowest p-6 rounded-lg border border-hairline shadow-xs flex-1 flex flex-col justify-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-brass"></div>
                 <div className="w-9 h-9 rounded-md bg-surface-container flex items-center justify-center text-brass mb-3 border border-hairline">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h3 className="font-headline text-base font-semibold text-primary">100% Verified Lawyers</h3>
+                <h3 className="font-headline text-base font-semibold text-primary">The Advocato Verification</h3>
                 <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                  Every attorney is actively licensed, in good standing with their state bar, and background-checked for quality.
+                  Every attorney on our platform must pass our stringent verification process. We confirm Bar Council enrollment, active licensing, and professional standing.
                 </p>
               </div>
 
@@ -563,9 +555,9 @@ function ClientHomeView() {
                 <div className="w-9 h-9 rounded-md bg-surface-container flex items-center justify-center text-brass mb-3 border border-hairline">
                   <Lock className="w-5 h-5" />
                 </div>
-                <h3 className="font-headline text-base font-semibold text-primary">Completely Private</h3>
+                <h3 className="font-headline text-base font-semibold text-primary">100% Confidentiality</h3>
                 <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                  Everything you share is strictly confidential between you and the lawyers. Your information is never sold or shared.
+                  Your legal situation is highly sensitive. We protect your data with end-to-end encryption. Your information is never sold to third parties.
                 </p>
               </div>
 
@@ -573,9 +565,9 @@ function ClientHomeView() {
                 <div className="w-9 h-9 rounded-md bg-surface-container flex items-center justify-center text-brass mb-3 border border-hairline">
                   <FileText className="w-5 h-5" />
                 </div>
-                <h3 className="font-headline text-base font-semibold text-primary">Clear, Upfront Prices</h3>
+                <h3 className="font-headline text-base font-semibold text-primary">Transparent Pricing</h3>
                 <p className="text-xs text-on-surface-variant leading-relaxed mt-1">
-                  See exact hourly rates and fees before you book a consultation. Zero hidden charges or unexpected bills.
+                  Legal help shouldn't come with surprise bills. See exact consultation fees upfront.
                 </p>
               </div>
             </div>
@@ -586,12 +578,12 @@ function ClientHomeView() {
             <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-6 gap-2">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-brass block">
-                  FEATURED ATTORNEYS
+                  VERIFIED PROFESSIONALS
                 </span>
                 <h2 className="font-headline text-xl font-semibold text-primary mt-0.5">
                   {lawyers.length > 0
-                    ? `Available Lawyers Ready to Help (${lawyers.length})`
-                    : "No Lawyers Available Yet"}
+                    ? `Advocates Ready to Help (${lawyers.length})`
+                    : "No Advocates Available Yet"}
                 </h2>
               </div>
               {lawyers.length > 0 && (
@@ -599,7 +591,7 @@ function ClientHomeView() {
                   href="/lawyers"
                   className="text-xs font-semibold text-slate hover:text-primary transition-colors inline-flex items-center gap-1"
                 >
-                  <span>View All Lawyers</span>
+                  <span>Browse All Verified Advocates</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               )}
@@ -615,14 +607,21 @@ function ClientHomeView() {
                   >
                     <div>
                       <div className="flex items-center gap-3.5 pb-3 border-b border-hairline">
-                        <img
-                          src={lawyer.avatar || getInitialsAvatar(lawyer.name)}
-                          alt={lawyer.name}
-                          className="w-12 h-12 rounded-full object-cover border border-hairline"
-                        />
+                        <div className="relative shrink-0">
+                          <img
+                            src={lawyer.avatar || getInitialsAvatar(lawyer.name)}
+                            alt={formatAdvocateName(lawyer.name)}
+                            className="w-12 h-12 rounded-full object-cover border border-hairline"
+                          />
+                          {lawyer.isVerified && (
+                            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
+                              <ShieldCheck className="w-4 h-4 text-brass" />
+                            </div>
+                          )}
+                        </div>
                         <div className="min-w-0">
                           <span className="font-headline text-base font-semibold text-primary block truncate group-hover:text-slate">
-                            {lawyer.name}
+                            {formatAdvocateName(lawyer.name)}
                           </span>
                           <span className="text-[11px] text-on-surface-variant font-medium block truncate">
                             {lawyer.jurisdiction}
@@ -634,8 +633,9 @@ function ClientHomeView() {
                         <div className="text-xs font-medium text-on-surface line-clamp-1">
                           {lawyer.title}
                         </div>
-                        <div className="text-[11px] text-on-surface-variant">
-                          {lawyer.yearsExperience}+ years trial &amp; negotiation experience
+                        <div className="text-[11px] text-on-surface-variant flex items-center gap-1">
+                          <Scale className="w-3 h-3" />
+                          {lawyer.yearsExperience}+ years experience
                         </div>
                       </div>
                     </div>
@@ -645,7 +645,7 @@ function ClientHomeView() {
                         ₹{lawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-[10px] text-on-surface-variant font-normal">/ hr</span>
                       </span>
                       <span className="text-xs font-medium text-slate group-hover:underline inline-flex items-center gap-0.5">
-                        <span>Profile</span>
+                        <span>View Profile</span>
                         <ArrowRight className="w-3 h-3" />
                       </span>
                     </div>
@@ -658,10 +658,10 @@ function ClientHomeView() {
                   <Scale className="w-6 h-6" />
                 </div>
                 <h3 className="font-headline text-base font-semibold text-primary mb-1.5">
-                  Be the First Lawyer on Advocato
+                  Are you a Licensed Advocate?
                 </h3>
                 <p className="text-xs text-on-surface-variant leading-relaxed mb-5 max-w-sm">
-                  Licensed attorneys can join our verified network and connect with clients who need legal help. Registration takes under 3 minutes.
+                  Join India's premier verified network and connect with clients needing legal assistance.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                   <Link
@@ -669,7 +669,7 @@ function ClientHomeView() {
                     className="bg-brass hover:bg-brass-hover text-white font-semibold text-xs px-5 py-3 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-colors min-h-[44px]"
                   >
                     <UserPlus className="w-4 h-4" />
-                    <span>Register as a Lawyer</span>
+                    <span>Register as an Advocate</span>
                   </Link>
                   <Link
                     href="/intake"

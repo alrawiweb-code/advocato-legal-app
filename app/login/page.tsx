@@ -22,6 +22,17 @@ function LoginFormContent() {
   const searchParams = useSearchParams();
   const redirectTarget = searchParams.get("redirect") || "/";
 
+  // Safety guard: prevent newly registered users from being redirected to
+  // restricted areas (like /admin) that they are not authorized to access.
+  // On registration, always fall back to the home dashboard.
+  const getSafeRedirectForRole = (role: "client" | "lawyer") => {
+    const RESTRICTED_PREFIXES = ["/admin"];
+    const isRestricted = RESTRICTED_PREFIXES.some((prefix) =>
+      redirectTarget.startsWith(prefix)
+    );
+    return isRestricted ? "/" : redirectTarget;
+  };
+
   const { login, registerClient, registerLawyer } = useUserRole();
 
   // Tab: "client" | "lawyer"
@@ -50,6 +61,8 @@ function LoginFormContent() {
   const [primaryPractice, setPrimaryPractice] = useState("Employment & Labor Law");
   const [hourlyRate, setHourlyRate] = useState("2500");
   const [bio, setBio] = useState("");
+
+  const [isRegistrationSuccess, setIsRegistrationSuccess] = useState(false);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,10 +119,11 @@ function LoginFormContent() {
         captchaToken: captchaTokenClient,
       });
       if (res.success) {
-        setSuccessMessage(
-          `Account created. A verification link has been sent to ${email.trim()}. Please check your inbox and click the link to activate your account.`
-        );
-        // Stay on page — do not redirect until email is confirmed
+        if (res.requiresEmailConfirmation) {
+          setIsRegistrationSuccess(true);
+        } else {
+          router.push(getSafeRedirectForRole("client"));
+        }
       } else {
         setErrorMessage(res.error || "Client registration failed.");
       }
@@ -151,10 +165,11 @@ function LoginFormContent() {
         captchaToken: captchaTokenLawyer,
       });
       if (res.success) {
-        setSuccessMessage(
-          `Account created. A verification link has been sent to ${email.trim()}. Please check your inbox, confirm your email, then complete bar verification to activate your profile.`
-        );
-        // Stay on page — do not redirect until email is confirmed
+        if (res.requiresEmailConfirmation) {
+          setIsRegistrationSuccess(true);
+        } else {
+          router.push(getSafeRedirectForRole("lawyer"));
+        }
       } else {
         setErrorMessage(res.error || "Lawyer registration failed.");
       }
@@ -183,73 +198,108 @@ function LoginFormContent() {
 
         {/* Main Authentication Card */}
         <div className="bg-surface-container-lowest p-6 sm:p-8 rounded-2xl border border-hairline shadow-sm space-y-6">
-          {/* Dual Role Selector: Client vs Lawyer */}
-          <div className="grid grid-cols-2 p-1 bg-surface-container-low rounded-xl border border-hairline gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRoleTab("client");
-                setErrorMessage(null);
-              }}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                selectedRoleTab === "client"
-                  ? "bg-surface-container-lowest text-primary shadow-xs"
-                  : "text-on-surface-variant hover:text-primary"
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Client Portal</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRoleTab("lawyer");
-                setErrorMessage(null);
-              }}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                selectedRoleTab === "lawyer"
-                  ? "bg-surface-container-lowest text-primary shadow-xs"
-                  : "text-on-surface-variant hover:text-primary"
-              }`}
-            >
-              <Briefcase className="w-3.5 h-3.5 text-brass" />
-              <span>Attorney Practice</span>
-            </button>
-          </div>
+          {isRegistrationSuccess ? (
+            <div className="text-center space-y-5 animate-in zoom-in-95 duration-200 py-4">
+              <div className="w-16 h-16 rounded-full bg-brass/10 border border-brass/30 mx-auto flex items-center justify-center text-brass">
+                <CheckCircle2 className="w-10 h-10 text-brass" />
+              </div>
 
-          {/* Mode Switcher: Sign In vs Register */}
-          <div className="flex border-b border-hairline text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("signin");
-                setErrorMessage(null);
-                setSuccessMessage(null);
-              }}
-              className={`flex-1 pb-3 text-center transition-colors relative ${
-                authMode === "signin"
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-on-surface-variant hover:text-primary"
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("register");
-                setErrorMessage(null);
-                setSuccessMessage(null);
-              }}
-              className={`flex-1 pb-3 text-center transition-colors relative ${
-                authMode === "register"
-                  ? "text-primary border-b-2 border-primary"
-                  : "text-on-surface-variant hover:text-primary"
-              }`}
-            >
-              {selectedRoleTab === "client" ? "Create Account" : "Register as Lawyer"}
-            </button>
-          </div>
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs font-semibold text-amber-800">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Email Verification Required</span>
+                </div>
+                <h2 className="font-headline text-2xl font-semibold text-primary">
+                  Check Your Inbox
+                </h2>
+                <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
+                  We've sent a verification link to <strong>{email.trim()}</strong>. Please click the link to verify your email and activate your account.
+                </p>
+              </div>
+              
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegistrationSuccess(false);
+                    setAuthMode("signin");
+                    setPassword("");
+                  }}
+                  className="w-full bg-brass hover:bg-brass-hover text-white py-3 px-4 rounded-lg text-xs font-semibold shadow-sm transition-all text-center flex items-center justify-center min-h-[44px]"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Dual Role Selector: Client vs Lawyer */}
+              <div className="grid grid-cols-2 p-1 bg-surface-container-low rounded-xl border border-hairline gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRoleTab("client");
+                    setErrorMessage(null);
+                  }}
+                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                    selectedRoleTab === "client"
+                      ? "bg-surface-container-lowest text-primary shadow-xs"
+                      : "text-on-surface-variant hover:text-primary"
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Client Portal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedRoleTab("lawyer");
+                    setErrorMessage(null);
+                  }}
+                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                    selectedRoleTab === "lawyer"
+                      ? "bg-surface-container-lowest text-primary shadow-xs"
+                      : "text-on-surface-variant hover:text-primary"
+                  }`}
+                >
+                  <Briefcase className="w-3.5 h-3.5 text-brass" />
+                  <span>Attorney Practice</span>
+                </button>
+              </div>
+
+              {/* Mode Switcher: Sign In vs Register */}
+              <div className="flex border-b border-hairline text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("signin");
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className={`flex-1 pb-3 text-center transition-colors relative ${
+                    authMode === "signin"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-on-surface-variant hover:text-primary"
+                  }`}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("register");
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className={`flex-1 pb-3 text-center transition-colors relative ${
+                    authMode === "register"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-on-surface-variant hover:text-primary"
+                  }`}
+                >
+                  {selectedRoleTab === "client" ? "Create Account" : "Register as Lawyer"}
+                </button>
+              </div>
 
           {/* Error Message Alert */}
           {errorMessage && (
@@ -557,6 +607,8 @@ function LoginFormContent() {
                 )}
               </button>
             </form>
+          )}
+          </>
           )}
         </div>
 

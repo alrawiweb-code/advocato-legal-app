@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { getLawyersForMatching, getAllLawyers, computeRatingSummary } from "@/lib/data/lawyers";
+import { computeRatingSummary } from "@/lib/data/lawyers";
 import { MarketplaceLawyerCard } from "@/types";
 
 export async function GET(request: Request) {
@@ -56,7 +56,15 @@ export async function GET(request: Request) {
       }
       
       if (search) {
-         query = query.or(`name.ilike.%${search}%,title.ilike.%${search}%,headline.ilike.%${search}%`);
+        let cleanSearch = search.trim();
+        const lowerSearch = cleanSearch.toLowerCase();
+        if (lowerSearch.startsWith("adv. ")) {
+          cleanSearch = cleanSearch.substring(5).trim();
+        } else if (lowerSearch.startsWith("adv ")) {
+          cleanSearch = cleanSearch.substring(4).trim();
+        }
+        
+        query = query.or(`name.ilike.%${cleanSearch}%,title.ilike.%${cleanSearch}%,headline.ilike.%${cleanSearch}%`);
       }
       
       // Apply sorting
@@ -109,70 +117,10 @@ export async function GET(request: Request) {
       }));
 
     } else {
-      // Fallback
-      const allMockLawyers = getAllLawyers();
-      let filtered = allMockLawyers.map(l => ({
-        id: l.id,
-        name: l.name,
-        title: l.title,
-        headline: l.headline,
-        avatar: l.avatar,
-        isVerified: l.isVerified,
-        verificationStatus: l.verificationStatus,
-        availability: l.availability,
-        acceptingClients: l.acceptingClients,
-        yearsExperience: l.yearsExperience,
-        jurisdiction: l.jurisdiction,
-        state: l.state,
-        languages: l.languages,
-        practiceAreas: l.practiceAreas,
-        primaryServices: l.serviceIds ? l.serviceIds.slice(0, 3) : [],
-        ratingSummary: l.ratingSummary || computeRatingSummary(l.rating, l.reviewCount, l.verifiedReviewCount),
-        tags: l.tags
-      })).filter(l => {
-        if (state !== "all" && l.state !== state) return false;
-        if (practiceArea !== "all" && !l.practiceAreas.includes(practiceArea)) return false;
-        if (serviceId !== "all" && !l.primaryServices.includes(serviceId)) return false;
-        if (l.yearsExperience < minExperience || l.yearsExperience > maxExperience) return false;
-        if (language !== "all" && (!l.languages || !l.languages.includes(language))) return false;
-        if (!l.isVerified || l.verificationStatus !== "VERIFIED") return false;
-        if (availability === "today" && l.availability !== "Available today") return false;
-        if (availability === "this_week" && l.availability !== "Available today" && l.availability !== "This week") return false;
-        if (search) {
-          const s = search.toLowerCase();
-          const searchableText = `${l.name} ${l.title} ${l.headline || ""} ${l.tags.join(" ")}`.toLowerCase();
-          if (!searchableText.includes(s)) return false;
-        }
-        return true;
-      });
-
-      switch (sort) {
-        case "highest_rated":
-          filtered.sort((a, b) => (b.ratingSummary.averageRating || 0) - (a.ratingSummary.averageRating || 0));
-          break;
-        case "most_experienced":
-          filtered.sort((a, b) => b.yearsExperience - a.yearsExperience);
-          break;
-        case "available_now":
-          filtered.sort((a, b) => {
-            if (a.availability === "Available today" && b.availability !== "Available today") return -1;
-            if (b.availability === "Available today" && a.availability !== "Available today") return 1;
-            return 0;
-          });
-          break;
-        case "recommended":
-        default:
-          filtered.sort((a, b) => {
-            const scoreA = (a.isVerified ? 10 : 0) + (a.ratingSummary.averageRating || 0);
-            const scoreB = (b.isVerified ? 10 : 0) + (b.ratingSummary.averageRating || 0);
-            return scoreB - scoreA;
-          });
-          break;
-      }
-
-      total = filtered.length;
-      const start = (page - 1) * limit;
-      lawyers = filtered.slice(start, start + limit);
+      // Platform requires Supabase
+      console.warn("Supabase not configured. No mock data available.");
+      lawyers = [];
+      total = 0;
     }
 
     const totalPages = Math.ceil(total / limit);

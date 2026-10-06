@@ -6,6 +6,7 @@ import { MarketplaceLawyerCard } from "@/types";
 import { ShieldCheck, MapPin, Briefcase, Globe, ChevronRight } from "lucide-react";
 import StarRating from "./StarRating";
 import { getServiceById } from "@/lib/data/practice-areas";
+import { formatAdvocateName } from "@/lib/utils/formatters";
 
 interface LawyerCardProps {
   lawyer: MarketplaceLawyerCard;
@@ -30,7 +31,7 @@ export default function LawyerCard({ lawyer, matchScore }: LawyerCardProps) {
           <div className="relative w-16 h-16 rounded-full overflow-hidden flex-shrink-0 border-2 border-surface-container">
             <Image
               src={lawyer.avatar}
-              alt={lawyer.name}
+              alt={formatAdvocateName(lawyer.name)}
               fill
               className="object-cover"
               sizes="64px"
@@ -39,7 +40,7 @@ export default function LawyerCard({ lawyer, matchScore }: LawyerCardProps) {
           <div>
             <div className="flex items-center gap-1.5 flex-wrap">
               <h3 className="font-headline-md text-primary text-xl leading-tight group-hover:text-brass transition-colors">
-                {lawyer.name}
+                {formatAdvocateName(lawyer.name)}
               </h3>
               {lawyer.isVerified && (
                 <span title="Verified by Advocato">

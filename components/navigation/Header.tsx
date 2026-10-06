@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { Search, User, ShieldCheck, Scale, X, LogOut, Lock } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { getStoredConsultations } from "@/lib/data/consultations";
+import { formatPersonaName } from "@/lib/utils/formatters";
 
 export function Header() {
   const pathname = usePathname();
@@ -287,7 +288,7 @@ export function Header() {
                   </div>
                   <div className="hidden lg:flex flex-col text-left leading-none">
                     <span className="text-xs font-bold text-primary truncate max-w-[120px]">
-                      {currentUser.name}
+                      {formatPersonaName(currentUser.name, role)}
                     </span>
                     <span className="text-[10px] text-brass font-medium capitalize mt-0.5">
                       {role === "admin" ? "Regulatory Admin" : role === "lawyer" ? "Attorney" : "Client"}

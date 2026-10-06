@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Lawyer, VerificationStatus } from "@/types";
-import { getLawyerById } from "@/lib/data/lawyers";
 import { createClient } from "@/lib/supabase/client";
 
 export type UserRole = "client" | "lawyer" | "admin" | "public";
@@ -55,7 +54,7 @@ interface RoleContextType {
   isSupabaseConnected: boolean;
   login: (credentials: LoginCredentials) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  registerClient: (data: { name: string; email: string; password?: string; captchaToken?: string }) => Promise<{ success: boolean; error?: string }>;
+  registerClient: (data: { name: string; email: string; password?: string; captchaToken?: string }) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
   registerLawyer: (data: {
     name: string;
     email: string;
@@ -66,7 +65,7 @@ interface RoleContextType {
     bio: string;
     password?: string;
     captchaToken?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
   setRole: (role: UserRole) => void;
   toggleRole: () => void;
   refreshUser: () => Promise<void>;
@@ -234,6 +233,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        if (error.message.includes("Email not confirmed")) {
+          return { success: false, error: "Please confirm your email address before signing in. Check your inbox for the verification link." };
+        }
         return { success: false, error: error.message };
       }
 
@@ -290,6 +292,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             full_name: data.name.trim(),
             role: "client",
           },
+          emailRedirectTo: `${window.location.origin}/auth/verify-success`,
         },
       });
 
@@ -298,6 +301,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (authData?.user) {
+        if (!authData.session) {
+          // Email confirmation is required, session is withheld.
+          // Do not hydrate profile or log in locally.
+          return { success: true, requiresEmailConfirmation: true };
+        }
         await hydrateUserProfile(authData.user.id, authData.user.email || data.email, {
           full_name: data.name,
           role: "client",
@@ -351,6 +359,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             bar_number: data.barNumber.trim(),
             jurisdiction: data.stateBar,
           },
+          emailRedirectTo: `${window.location.origin}/auth/verify-success`,
         },
       });
 
@@ -361,6 +370,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       const userId = authData.user?.id;
       if (!userId) {
         return { success: false, error: "Attorney account creation failed." };
+      }
+
+      if (!authData.session) {
+        // Email confirmation is required, session is withheld.
+        // Do not hydrate profile or log in locally.
+        return { success: true, requiresEmailConfirmation: true };
       }
 
       // Note: We no longer auto-create the lawyer_profile immediately on sign up.
@@ -410,9 +425,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = sessionUser !== null;
   const role: UserRole = sessionUser?.role || "public";
-  const activeLawyer =
-    myLawyerProfile ||
-    (activeLawyerId ? getLawyerById(activeLawyerId) || null : null);
+  const activeLawyer = myLawyerProfile || null;
 
   const currentUser: UserPersona = sessionUser || {
     id: "guest",

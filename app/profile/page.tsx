@@ -17,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
+import { formatPersonaName } from "@/lib/utils/formatters";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -61,7 +62,7 @@ export default function ProfilePage() {
                   {initials}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-headline text-base sm:text-lg font-semibold text-primary truncate">{currentUser.name}</h2>
+                  <h2 className="font-headline text-base sm:text-lg font-semibold text-primary truncate">{formatPersonaName(currentUser.name, role)}</h2>
                   <p className="text-xs text-on-surface-variant truncate">{currentUser.email}</p>
                   <div className="flex items-center gap-1.5 text-[11px] text-brass font-medium mt-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-brass shrink-0" />

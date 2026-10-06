@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { getLawyerById, computeRatingSummary } from "@/lib/data/lawyers";
+import { computeRatingSummary } from "@/lib/data/lawyers";
 import { getServicesForPracticeArea } from "@/lib/data/practice-areas";
 
 export async function GET(
@@ -47,13 +47,30 @@ export async function GET(
         throw error;
       }
 
-      // Suspended lawyers are not publicly accessible
+      // Unverified or suspended lawyers are not publicly accessible.
+      // However, if the currently authenticated user IS this lawyer,
+      // return 403 with their actual verification status so the UI
+      // can show a helpful, context-aware message instead of "Not Found".
       if (l.verification_status === "SUSPENDED" || !l.is_verified) {
+        if (user.id === l.id) {
+          // Own profile — return status context, not a generic 404
+          return NextResponse.json(
+            {
+              error: "profile_not_public",
+              verificationStatus: l.verification_status,
+              name: l.name,
+              isOwnProfile: true,
+            },
+            { status: 403 }
+          );
+        }
+        // External visitor — preserve existing marketplace privacy
         return NextResponse.json(
-          { error: "This lawyer profile is not currently available." },
+          { error: "Lawyer not found" },
           { status: 404 }
         );
       }
+
 
       // Fetch actual services if we have service_ids
       let populatedServices: any[] = [];
@@ -100,31 +117,9 @@ export async function GET(
       
       return NextResponse.json(fullProfile);
     } else {
-      // Fallback to mock data
-      const lawyer = getLawyerById(id);
-      if (!lawyer) {
-        return NextResponse.json({ error: "Lawyer not found" }, { status: 404 });
-      }
-
-      let populatedServices = lawyer.services || [];
-      if (populatedServices.length === 0 && lawyer.serviceIds) {
-         const taxonomyServices = lawyer.practiceAreas.flatMap(paName => {
-           const paId = paName.toLowerCase().split(' ')[0];
-           return getServicesForPracticeArea(paId);
-         });
-         
-         if (taxonomyServices.length > 0) {
-             populatedServices = taxonomyServices.filter(s => lawyer.serviceIds?.includes(s.id));
-         }
-      }
-
-      const fullProfile = {
-        ...lawyer,
-        services: populatedServices,
-        ratingSummary: lawyer.ratingSummary || computeRatingSummary(lawyer.rating, lawyer.reviewCount, lawyer.verifiedReviewCount)
-      };
-
-      return NextResponse.json(fullProfile);
+      // Platform requires Supabase
+      console.warn("Supabase not configured. No mock data available.");
+      return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
     }
 
   } catch (error: any) {

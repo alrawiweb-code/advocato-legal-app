@@ -1,5 +1,4 @@
 import { Consultation, ConsultationMessage, DocumentAttachment, Lawyer } from "@/types";
-import { getAllLawyers } from "./lawyers";
 
 export const INITIAL_CONSULTATIONS: Consultation[] = [];
 
@@ -68,9 +67,7 @@ export function getOrCreateConsultationForLawyer(
     return existing;
   }
 
-  // Look up lawyer from all lawyers (including newly registered lawyers)
-  const allLawyers = getAllLawyers();
-  const foundLawyer = allLawyers.find((l) => l.id === lawyerId);
+  const foundLawyer = undefined;
 
   const lawyer: Lawyer = foundLawyer || {
     id: lawyerId,

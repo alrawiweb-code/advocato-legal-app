@@ -19,7 +19,9 @@ import {
   MapPin,
   Globe,
   Briefcase,
-  Sparkles
+  Sparkles,
+  Lock,
+  AlertTriangle
 } from "lucide-react";
 
 import { getOrCreateConsultationForLawyer } from "@/lib/data/consultations";
@@ -43,6 +45,11 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [intakeData, setIntakeData] = useState<IntakeAssessment | null>(null);
+
+  // Profile status state — drives which screen to render
+  type ProfileStatus = "loading" | "found" | "not_found" | "own_profile_pending";
+  const [profileStatus, setProfileStatus] = useState<ProfileStatus>("loading");
+  const [ownVerificationStatus, setOwnVerificationStatus] = useState<string | null>(null);
 
   // Booking Modal State
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -69,8 +76,10 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
       try {
         const res = await fetch(`/api/lawyers/${resolvedParams.id}`);
         if (res.ok) {
+          // Case C: Verified lawyer — show full public profile
           const data = await res.json();
           setLawyer(data);
+          setProfileStatus("found");
           setEditForm({
             name: data.name,
             title: data.title,
@@ -81,9 +90,20 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
           });
           setAvatarPreview(data.avatar);
         } else if (res.status === 401) {
+          // Unauthenticated — redirect to login
           router.push(`/login?redirect=/lawyers/${resolvedParams.id}`);
+        } else if (res.status === 403) {
+          // Case B: Own unverified profile — show pending screen
+          const data = await res.json();
+          if (data.error === "profile_not_public" && data.isOwnProfile) {
+            setOwnVerificationStatus(data.verificationStatus);
+            setProfileStatus("own_profile_pending");
+          } else {
+            setProfileStatus("not_found");
+          }
         } else {
-          setLawyer(null);
+          // Case A: Genuine 404 — lawyer does not exist
+          setProfileStatus("not_found");
         }
       } catch (e) {
         console.error("Failed to load lawyer", e);
@@ -242,7 +262,8 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     );
   }
 
-  if (lawyer === null) {
+  // Case A: Lawyer genuinely does not exist or was deleted
+  if (profileStatus === "not_found") {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-background py-20 px-4">
         <div className="w-16 h-16 bg-surface-container rounded-full flex items-center justify-center mb-6">
@@ -255,6 +276,117 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
         <Link href="/lawyers" className="btn-editorial bg-primary text-white px-6 py-3 rounded-lg">
           Back to Directory
         </Link>
+      </div>
+    );
+  }
+
+  // Case B: Lawyer exists but their own profile is not yet publicly visible
+  if (profileStatus === "own_profile_pending") {
+    const vs = ownVerificationStatus;
+
+    const headline =
+      vs === "NOT_VERIFIED"
+        ? "Verification Required"
+        : vs === "PENDING" || vs === "SUBMITTED" || vs === "UNDER_REVIEW"
+        ? "Verification Under Review"
+        : vs === "DOCUMENTS_REQUIRED"
+        ? "Documents Required"
+        : vs === "REJECTED"
+        ? "Application Requires Attention"
+        : vs === "SUSPENDED"
+        ? "Profile Suspended"
+        : "Profile Not Yet Active";
+
+    const body =
+      vs === "NOT_VERIFIED"
+        ? "You haven't yet completed your professional bar verification. Your public profile will go live once your credentials have been reviewed and approved by the Admissions desk."
+        : vs === "PENDING" || vs === "SUBMITTED" || vs === "UNDER_REVIEW"
+        ? "Your bar enrollment certificate and credentials are currently under review by the Advocato Admissions desk. Your public profile will become available upon approval."
+        : vs === "DOCUMENTS_REQUIRED"
+        ? "The Admissions desk has requested additional documents to complete your verification. Please check your dashboard for details and resubmit."
+        : vs === "REJECTED"
+        ? "Your verification application requires revision. Please review the feedback from the Admissions desk and resubmit your updated credentials."
+        : vs === "SUSPENDED"
+        ? "Your marketplace profile has been temporarily suspended. Please contact Advocato support for further assistance."
+        : "Your public profile is not currently active. Please check your dashboard for more information.";
+
+    const statusBadgeColor =
+      vs === "NOT_VERIFIED"
+        ? "bg-amber-50 text-amber-800 border-amber-200"
+        : vs === "PENDING" || vs === "SUBMITTED" || vs === "UNDER_REVIEW"
+        ? "bg-blue-50 text-blue-800 border-blue-200"
+        : vs === "DOCUMENTS_REQUIRED"
+        ? "bg-orange-50 text-orange-800 border-orange-200"
+        : vs === "REJECTED"
+        ? "bg-rose-50 text-rose-800 border-rose-200"
+        : vs === "SUSPENDED"
+        ? "bg-red-50 text-red-800 border-red-200"
+        : "bg-surface-container text-on-surface-variant border-hairline";
+
+    const IconComponent =
+      vs === "REJECTED" || vs === "SUSPENDED" ? AlertTriangle
+      : vs === "PENDING" || vs === "SUBMITTED" || vs === "UNDER_REVIEW" ? Clock
+      : Lock;
+
+    const iconColor =
+      vs === "SUSPENDED" ? "text-red-600"
+      : vs === "REJECTED" ? "text-rose-600"
+      : vs === "PENDING" || vs === "SUBMITTED" || vs === "UNDER_REVIEW" ? "text-blue-500"
+      : "text-brass";
+
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-background py-20 px-4">
+        <div className="w-full max-w-md text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          {/* Icon */}
+          <div className="w-20 h-20 rounded-full bg-surface-container-low border border-hairline mx-auto flex items-center justify-center">
+            <IconComponent className={`w-9 h-9 ${iconColor}`} />
+          </div>
+
+          {/* Status Badge */}
+          <div className="flex justify-center">
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${statusBadgeColor}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+              {vs?.replace(/_/g, " ")}
+            </span>
+          </div>
+
+          {/* Headline & Body */}
+          <div className="space-y-3">
+            <h1 className="font-headline text-2xl sm:text-3xl font-semibold text-primary tracking-tight">
+              {headline}
+            </h1>
+            <p className="text-sm sm:text-base text-on-surface-variant leading-relaxed max-w-sm mx-auto">
+              {body}
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-hairline" />
+
+          {/* Trust Note */}
+          <p className="text-xs text-on-surface-variant flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-brass shrink-0" />
+            Your profile data is secure and will be available once verified.
+          </p>
+
+          {/* CTAs */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Link
+              href="/"
+              className="w-full sm:w-auto btn-editorial bg-primary text-white px-6 py-3 rounded-lg text-sm font-semibold text-center"
+            >
+              Back to Dashboard
+            </Link>
+            {(vs === "NOT_VERIFIED" || vs === "DOCUMENTS_REQUIRED" || vs === "REJECTED") && (
+              <Link
+                href="/lawyer/verify"
+                className="w-full sm:w-auto btn-editorial-brass bg-brass text-white px-6 py-3 rounded-lg text-sm font-semibold text-center"
+              >
+                {vs === "REJECTED" ? "Resubmit Credentials" : vs === "DOCUMENTS_REQUIRED" ? "Upload Documents" : "Apply for Verification"}
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

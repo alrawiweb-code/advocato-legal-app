@@ -42,8 +42,9 @@ import {
   saveStoredConsultations,
   getOrCreateConsultationForLawyer,
 } from "@/lib/data/consultations";
-import { getAllLawyers } from "@/lib/data/lawyers";
+
 import { Consultation, ConsultationMessage, DocumentAttachment, Lawyer } from "@/types";
+import { formatAdvocateName } from "@/lib/utils/formatters";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import { createClient } from "@/lib/supabase/client";
 import { getUserMatters } from "@/lib/supabase/matters";
@@ -115,7 +116,12 @@ function MessagesView() {
   // 1. Initialize consultations: load from Supabase matters, fallback to storage
   useEffect(() => {
     async function initConsultations() {
-      setAllLawyersList(getAllLawyers());
+      fetch("/api/lawyers")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.lawyers) setAllLawyersList(data.lawyers);
+        })
+        .catch((err) => console.error("Failed to fetch lawyers for messaging:", err));
 
       let activeList: Consultation[] = [];
 
@@ -846,7 +852,7 @@ function MessagesView() {
                             {(c.clientName || "CL").slice(0, 2).toUpperCase()}
                           </div>
                         ) : (
-                          <img src={c.lawyer.avatar} alt={c.lawyer.name} className="w-full h-full object-cover" />
+                          <img src={c.lawyer.avatar} alt={formatAdvocateName(c.lawyer.name)} className="w-full h-full object-cover" />
                         )}
                         {c.lastActive === "online" && (
                           <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
@@ -856,7 +862,7 @@ function MessagesView() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline justify-between mb-0.5">
                           <h4 className="text-xs font-bold text-primary truncate flex items-center gap-1">
-                            <span>{role === "lawyer" ? (c.clientName || "Client") : c.lawyer.name}</span>
+                            <span>{role === "lawyer" ? (c.clientName || "Client") : formatAdvocateName(c.lawyer.name)}</span>
                             {role === "client" && c.lawyer.isVerified && (
                               <span className="w-3 h-3 rounded-full bg-brass flex items-center justify-center shrink-0">
                                 <Check className="w-2 h-2 text-white stroke-[3]" />
@@ -975,7 +981,7 @@ function MessagesView() {
                         ) : (
                           <img
                             src={activeConsultation.lawyer.avatar}
-                            alt={activeConsultation.lawyer.name}
+                            alt={formatAdvocateName(activeConsultation.lawyer.name)}
                             className="w-full h-full object-cover"
                           />
                         )}
@@ -987,7 +993,7 @@ function MessagesView() {
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-1.5 truncate">
                           <h3 className="text-xs sm:text-sm font-bold text-primary truncate leading-tight">
-                            {role === "lawyer" ? `${activeConsultation.clientName || currentUser.name} (Client)` : activeConsultation.lawyer.name}
+                            {role === "lawyer" ? `${activeConsultation.clientName || currentUser.name} (Client)` : formatAdvocateName(activeConsultation.lawyer.name)}
                           </h3>
                       {role !== "lawyer" && activeConsultation.lawyer.isVerified && (
                         <div className="w-3.5 h-3.5 rounded-full bg-brass flex items-center justify-center shrink-0">
@@ -1143,7 +1149,7 @@ function MessagesView() {
                           isSentByMe ? "text-brass" : "text-slate"
                         }`}
                       >
-                        <span>{msg.senderName}</span>
+                        <span>{msg.senderRole === "lawyer" ? formatAdvocateName(msg.senderName) : msg.senderName}</span>
                         <span className="text-[9px] font-normal opacity-80">{msg.timestamp}</span>
                       </div>
 
@@ -1241,7 +1247,7 @@ function MessagesView() {
                   <div className="w-1.5 h-1.5 rounded-full bg-brass animate-bounce [animation-delay:0.2s]" />
                   <div className="w-1.5 h-1.5 rounded-full bg-brass animate-bounce [animation-delay:0.4s]" />
                   <span className="text-[11px] font-medium text-slate">
-                    {activeConsultation.lawyer.name} is typing...
+                    {formatAdvocateName(activeConsultation.lawyer.name)} is typing...
                   </span>
                 </div>
               )}
@@ -1353,7 +1359,7 @@ function MessagesView() {
                     placeholder={
                       role === "lawyer"
                         ? `Message ${activeConsultation.clientName || currentUser.name}...`
-                        : `Message ${activeConsultation.lawyer.name}...`
+                        : `Message ${formatAdvocateName(activeConsultation.lawyer.name)}...`
                     }
                     className="flex-1 bg-surface-container-lowest border border-hairline rounded-lg px-3.5 py-2 text-xs sm:text-sm text-on-surface placeholder:text-outline-variant focus:outline-none focus:border-slate shadow-2xs"
                   />
@@ -1402,12 +1408,12 @@ function MessagesView() {
                   ) : (
                     <img
                       src={activeConsultation.lawyer.avatar}
-                      alt={activeConsultation.lawyer.name}
+                      alt={formatAdvocateName(activeConsultation.lawyer.name)}
                       className="w-16 h-16 rounded-full object-cover border border-hairline shadow-sm mb-2"
                     />
                   )}
                   <h3 className="font-headline text-base font-bold text-primary">
-                    {role === "lawyer" ? (activeConsultation.clientName || currentUser.name) : activeConsultation.lawyer.name}
+                    {role === "lawyer" ? (activeConsultation.clientName || currentUser.name) : formatAdvocateName(activeConsultation.lawyer.name)}
                   </h3>
                   <span className="text-[11px] text-on-surface-variant">
                     {role === "lawyer" ? "Matter Client" : activeConsultation.lawyer.title}
@@ -1547,11 +1553,11 @@ function MessagesView() {
                 >
                   <img
                     src={lawyer.avatar}
-                    alt={lawyer.name}
+                    alt={formatAdvocateName(lawyer.name)}
                     className="w-11 h-11 rounded-full object-cover border border-hairline shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-primary truncate">{lawyer.name}</h4>
+                    <h4 className="text-xs font-bold text-primary truncate">{formatAdvocateName(lawyer.name)}</h4>
                     <span className="text-[11px] text-on-surface-variant truncate block">{lawyer.title}</span>
                     <span className="text-[10px] text-brass font-semibold">{lawyer.jurisdiction} • ₹{lawyer.hourlyRate.toLocaleString("en-IN")}/hr</span>
                   </div>
@@ -1571,7 +1577,7 @@ function MessagesView() {
           counterpartName={
             role === "lawyer"
               ? (activeConsultation.clientName || currentUser.name)
-              : activeConsultation.lawyer.name
+              : formatAdvocateName(activeConsultation.lawyer.name)
           }
           onClose={() => setActiveCallModal(null)}
         />
@@ -1585,7 +1591,7 @@ function MessagesView() {
           counterpartName={
             role === "lawyer"
               ? (activeConsultation.clientName || currentUser.name)
-              : activeConsultation.lawyer.name
+              : formatAdvocateName(activeConsultation.lawyer.name)
           }
           onClose={() => setActiveCallModal(null)}
           audioOnly={true}

@@ -6,6 +6,7 @@ import { FolderOpen, ArrowRight, ShieldCheck, Clock, Plus, Scale, RefreshCw, Loc
 import { getStoredConsultations } from "@/lib/data/consultations";
 import { Consultation } from "@/types";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
+import { formatAdvocateName } from "@/lib/utils/formatters";
 import { getUserMatters } from "@/lib/supabase/matters";
 import { VerificationModal } from "@/components/lawyer/VerificationModal";
 
@@ -200,7 +201,7 @@ export default function CasesPage() {
                       ) : (
                         <img
                           src={matter.lawyer.avatar}
-                          alt={matter.lawyer.name}
+                          alt={formatAdvocateName(matter.lawyer.name)}
                           className="w-full h-full object-cover"
                         />
                       )}
@@ -220,7 +221,7 @@ export default function CasesPage() {
 
                       <div className="flex items-center gap-2 text-xs text-on-surface-variant mt-2 flex-wrap">
                         <span className="font-semibold text-primary">
-                          {role === "lawyer" ? `Client: ${matter.clientName}` : matter.lawyer.name}
+                          {role === "lawyer" ? `Client: ${matter.clientName}` : formatAdvocateName(matter.lawyer.name)}
                         </span>
                         <span>•</span>
                         <span>{matter.lawyer.jurisdiction}</span>

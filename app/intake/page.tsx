@@ -13,7 +13,7 @@ import {
   Scale,
   CheckCircle2,
 } from "lucide-react";
-import { getAllLawyers, INDIAN_STATES } from "@/lib/data/lawyers";
+import { INDIAN_STATES } from "@/lib/data/lawyers";
 import { uploadEvidentiaryDocument } from "@/lib/storage/documents";
 import { saveIntakeAssessment } from "@/lib/supabase/matters";
 
@@ -252,8 +252,7 @@ export default function IntakePage() {
     }, 850);
 
     try {
-      const currentLawyers = getAllLawyers();
-      const intakeMatterId = `matter-intake-${Date.now()}`;
+            const intakeMatterId = `matter-intake-${Date.now()}`;
 
       // Upload raw files to Supabase Storage if available
       const processedDocuments = await Promise.all(
@@ -293,7 +292,7 @@ export default function IntakePage() {
           urgency: "Medium",
           situation: finalSituation,
           documents: processedDocuments,
-          lawyers: currentLawyers,
+          
         }),
       });
 

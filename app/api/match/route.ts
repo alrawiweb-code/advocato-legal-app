@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { getAllLawyers } from "@/lib/data/lawyers";
+
+import { createClient } from "@/lib/supabase/server";
+import { computeRatingSummary } from "@/lib/data/lawyers";
 import { Lawyer, IntakeAssessment } from "@/types";
 
 interface RequestBody {
@@ -23,7 +25,43 @@ export async function POST(req: Request) {
   try {
     const body: RequestBody = await req.json();
     const situation = body.situation?.trim() || "";
-    const lawyersList: Lawyer[] = body.lawyers && body.lawyers.length > 0 ? body.lawyers : getAllLawyers();
+    
+    let lawyersList: Lawyer[] = body.lawyers && body.lawyers.length > 0 ? body.lawyers : [];
+    if (lawyersList.length === 0) {
+      const supabase = await createClient();
+      const { data } = await supabase.from("lawyer_marketplace_view")
+        .select("*")
+        .eq("is_verified", true)
+        .eq("verification_status", "VERIFIED")
+        .limit(20);
+      
+      if (data) {
+        lawyersList = data.map((l: any) => ({
+          id: l.id,
+          name: l.name,
+          title: l.title,
+          headline: l.headline,
+          avatar: l.avatar,
+          isVerified: l.is_verified,
+          verificationStatus: l.verification_status,
+          availability: l.availability,
+          acceptingClients: l.accepting_clients,
+          yearsExperience: l.years_experience,
+          jurisdiction: l.jurisdiction,
+          state: l.state,
+          languages: l.languages,
+          practiceAreas: l.practice_areas,
+          hourlyRate: 2500,
+          bio: "",
+          tags: l.tags,
+          rating: l.computed_rating || 0,
+          reviewCount: l.total_review_count || 0,
+          verifiedReviewCount: l.total_verified_review_count || 0,
+          notableCases: []
+        }));
+      }
+    }
+
 
     if (!situation && !body.caseTitle) {
       return NextResponse.json(
