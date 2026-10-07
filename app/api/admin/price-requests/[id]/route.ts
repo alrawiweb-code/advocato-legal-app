@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
-import { getAdminClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+
+function getAdminClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return createSupabaseClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = getAdminClient();
 
   try {
     const { action, rejectionReason, adminId } = await request.json(); // action: "APPROVE" or "REJECT"
-    const { id } = params;
+    const { id } = await params;
 
     if (!action || !["APPROVE", "REJECT"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });

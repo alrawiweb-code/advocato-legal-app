@@ -24,7 +24,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Application not found" }, { status: 404 });
   }
 
-  const result = await approveLawyerApplication(application.id, application.lawyer_id, user.id);
+  const body = await request.json().catch(() => ({}));
+  const assignedRate = parseInt(body.assignedRate, 10);
+  if (isNaN(assignedRate) || assignedRate <= 0) {
+    return NextResponse.json({ error: "A valid assignedRate is required" }, { status: 400 });
+  }
+
+  const result = await approveLawyerApplication(application.id, application.lawyer_id, user.id, assignedRate);
 
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 500 });

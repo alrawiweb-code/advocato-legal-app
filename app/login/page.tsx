@@ -159,7 +159,6 @@ function LoginFormContent() {
         barNumber: barNumber.trim(),
         stateBar,
         primaryPractice,
-        hourlyRate: Number(hourlyRate) || 2500,
         bio: bio.trim() || `Licensed attorney admitted to ${stateBar} specializing in ${primaryPractice}.`,
         password: password,
         captchaToken: captchaTokenLawyer,

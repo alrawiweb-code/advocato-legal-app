@@ -61,7 +61,6 @@ interface RoleContextType {
     barNumber: string;
     stateBar: string;
     primaryPractice: string;
-    hourlyRate: number | string;
     bio: string;
     password?: string;
     captchaToken?: string;
@@ -325,7 +324,6 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     barNumber: string;
     stateBar: string;
     primaryPractice: string;
-    hourlyRate: number | string;
     bio: string;
     password?: string;
     captchaToken?: string;
