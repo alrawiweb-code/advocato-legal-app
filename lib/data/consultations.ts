@@ -77,7 +77,7 @@ export function getOrCreateConsultationForLawyer(
     avatar: "",
     rating: 5.0,
     reviewCount: 0,
-    hourlyRate: 2500,
+    hourlyRate: null,
     isVerified: true,
     availability: "Available today",
     yearsExperience: 5,

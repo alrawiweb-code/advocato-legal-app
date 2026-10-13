@@ -38,7 +38,7 @@ export default function CasesPage() {
                 avatar: m.lawyer?.avatar_url || getInitialsAvatar(counselorName),
                 rating: 5.0,
                 reviewCount: 1,
-                hourlyRate: 2500,
+                hourlyRate: null,
                 isVerified: true,
                 availability: "Available today",
                 yearsExperience: 5,

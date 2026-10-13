@@ -33,6 +33,7 @@ export async function POST(req: Request) {
         .select("*")
         .eq("is_verified", true)
         .eq("verification_status", "VERIFIED")
+        .gt("hourly_rate", 0)
         .limit(20);
       
       if (data) {
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
           state: l.state,
           languages: l.languages,
           practiceAreas: l.practice_areas,
-          hourlyRate: 2500,
+          hourlyRate: l.hourly_rate,
           bio: "",
           tags: l.tags,
           rating: l.computed_rating || 0,

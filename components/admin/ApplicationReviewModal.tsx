@@ -249,7 +249,11 @@ export function ApplicationReviewModal({
                   <div>•</div>
                   <div>
                     <span className="font-semibold text-primary">Rate: </span>
-                    <span>₹{appDetail.lawyer_profile?.hourly_rate || 2500}/hr</span>
+                    <span>
+                      {appDetail.lawyer_profile?.hourly_rate
+                        ? `₹${appDetail.lawyer_profile.hourly_rate.toLocaleString("en-IN")}/hr`
+                        : "Pending Assignment"}
+                    </span>
                   </div>
                 </div>
               </div>

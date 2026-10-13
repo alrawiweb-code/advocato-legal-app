@@ -61,10 +61,17 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [showPriceRequestModal, setShowPriceRequestModal] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    title: string;
+    hourlyRate: number | null;
+    jurisdiction: string;
+    bio: string;
+    headline: string;
+  }>({
     name: "",
     title: "",
-    hourlyRate: 2500,
+    hourlyRate: null,
     jurisdiction: "",
     bio: "",
     headline: "",
@@ -154,6 +161,10 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
   const handleOpenBooking = () => {
     if (role === "client") {
+      if (!lawyer?.hourlyRate || lawyer.hourlyRate <= 0) {
+        alert("This lawyer is currently unavailable for new bookings.");
+        return;
+      }
       setShowBookingModal(true);
     } else {
       alert("Only clients can book consultations.");
@@ -161,7 +172,7 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   };
 
   const confirmBooking = async () => {
-    if (!lawyer) return;
+    if (!lawyer || !lawyer.hourlyRate || lawyer.hourlyRate <= 0) return;
 
     try {
       const { matter, error } = await createOrGetMatter({
@@ -206,7 +217,9 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
       formData.append("name", editForm.name);
       formData.append("title", editForm.title);
       formData.append("headline", editForm.headline);
-      formData.append("hourlyRate", editForm.hourlyRate.toString());
+      if (editForm.hourlyRate !== null) {
+        formData.append("hourlyRate", editForm.hourlyRate.toString());
+      }
       formData.append("jurisdiction", editForm.jurisdiction);
       formData.append("bio", editForm.bio);
       
@@ -603,7 +616,9 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                 </li>
                 <li className="flex justify-between items-center text-sm">
                   <span className="text-outline flex items-center gap-2"><Scale className="w-4 h-4"/> Rate</span>
-                  <span className="font-semibold text-primary">₹{lawyer.hourlyRate.toLocaleString("en-IN")}/hr</span>
+                  <span className="font-semibold text-primary">
+                    {lawyer.hourlyRate ? `₹${lawyer.hourlyRate.toLocaleString("en-IN")}/hr` : "Pending Assignment"}
+                  </span>
                 </li>
                 <li className="flex justify-between items-center text-sm">
                   <span className="text-outline flex items-center gap-2"><Clock className="w-4 h-4"/> Avg. Response</span>
@@ -699,7 +714,9 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
               <div>
                 <h3 className="font-headline text-lg font-semibold text-primary">{lawyer.name}</h3>
                 <span className="text-xs text-on-surface-variant">{lawyer.title}</span>
-                <div className="text-xs font-semibold text-brass mt-0.5">₹{lawyer.hourlyRate.toLocaleString("en-IN")}/hr consultation</div>
+                <div className="text-xs font-semibold text-brass mt-0.5">
+                  {lawyer.hourlyRate ? `₹${lawyer.hourlyRate.toLocaleString("en-IN")}/hr consultation` : "Rate pending assignment"}
+                </div>
               </div>
             </div>
 
@@ -758,7 +775,9 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                     <Clock className="w-3.5 h-3.5 text-brass" />
                     <span>Consultation Request</span>
                   </div>
-                  <span className="text-brass">₹{lawyer.hourlyRate.toLocaleString("en-IN")} / hr</span>
+                  <span className="text-brass">
+                    {lawyer.hourlyRate ? `₹${lawyer.hourlyRate.toLocaleString("en-IN")} / hr` : "Pending Assignment"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
                   <ShieldCheck className="w-3.5 h-3.5 text-brass shrink-0" />
@@ -835,7 +854,9 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                 <div>
                   <label className="block text-xs font-semibold text-on-surface mb-1.5">Official Hourly Rate</label>
                   <div className="w-full bg-surface-container-low border border-hairline rounded-lg px-3 py-2 text-sm text-on-surface-variant font-medium flex items-center justify-between">
-                    <span>₹{editForm.hourlyRate.toLocaleString("en-IN")}/hr</span>
+                    <span>
+                      {editForm.hourlyRate ? `₹${editForm.hourlyRate.toLocaleString("en-IN")}/hr` : "Pending Assignment"}
+                    </span>
                     <span className="text-[10px] uppercase tracking-wider text-brass font-bold">Admin Managed</span>
                   </div>
                 </div>

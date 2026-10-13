@@ -146,7 +146,7 @@ function MessagesView() {
                 avatar: m.lawyer?.avatar_url || getInitialsAvatar(counselorName),
                 rating: 5.0,
                 reviewCount: 1,
-                hourlyRate: 2500,
+                hourlyRate: null,
                 isVerified: true,
                 availability: "Available today",
                 yearsExperience: 5,
@@ -1053,9 +1053,11 @@ function MessagesView() {
                   <span>
                     Scheduled: <strong>{activeConsultation.appointmentDate}</strong> ({activeConsultation.consultationType || "Video"} Consultation)
                   </span>
-                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    Pre-Authorized Escrow (₹{activeConsultation.lawyer.hourlyRate.toLocaleString("en-IN")})
-                  </span>
+                  {activeConsultation.lawyer.hourlyRate ? (
+                    <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Pre-Authorized Escrow (₹{activeConsultation.lawyer.hourlyRate.toLocaleString("en-IN")})
+                    </span>
+                  ) : null}
                 </div>
                 <button
                   onClick={() => handleCallStart(activeConsultation.consultationType === "phone" ? "phone" : "video")}
@@ -1456,7 +1458,11 @@ function MessagesView() {
                   )}
                   <div className="flex justify-between pb-1.5 border-b border-hairline text-on-surface-variant">
                     <span>Rate / Escrow</span>
-                    <span className="font-semibold text-primary">₹{activeConsultation.lawyer.hourlyRate.toLocaleString("en-IN")}/hr</span>
+                    <span className="font-semibold text-primary">
+                      {activeConsultation.lawyer.hourlyRate
+                        ? `₹${activeConsultation.lawyer.hourlyRate.toLocaleString("en-IN")}/hr`
+                        : "Rate Pending Assignment"}
+                    </span>
                   </div>
                   <div className="flex justify-between text-on-surface-variant">
                     <span>Privacy</span>
@@ -1559,7 +1565,9 @@ function MessagesView() {
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-bold text-primary truncate">{formatAdvocateName(lawyer.name)}</h4>
                     <span className="text-[11px] text-on-surface-variant truncate block">{lawyer.title}</span>
-                    <span className="text-[10px] text-brass font-semibold">{lawyer.jurisdiction} • ₹{lawyer.hourlyRate.toLocaleString("en-IN")}/hr</span>
+                    <span className="text-[10px] text-brass font-semibold">
+                      {lawyer.jurisdiction}{lawyer.hourlyRate ? ` • ₹${lawyer.hourlyRate.toLocaleString("en-IN")}/hr` : ""}
+                    </span>
                   </div>
                   <Plus className="w-4 h-4 text-brass shrink-0" />
                 </div>

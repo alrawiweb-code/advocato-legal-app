@@ -126,7 +126,7 @@ export async function submitVerificationApplication(payload: {
         bar_number: payload.barNumber.trim(),
         state_bar: payload.stateBar,
         years_experience: payload.yearsExperience,
-        hourly_rate: 2500,
+
         availability: "Available today",
         bio: `Licensed attorney admitted to the Bar Council of ${payload.stateBar}.`,
         rating: 5.0,
@@ -268,7 +268,7 @@ export async function getAdminApplications(filterStatus?: string): Promise<Lawye
       avatar_url: row.lawyer_profiles?.profiles?.avatar_url || null,
       title: row.lawyer_profiles?.title || "Advocate",
       headline: row.lawyer_profiles?.headline || "",
-      hourly_rate: row.lawyer_profiles?.hourly_rate || 2500,
+      hourly_rate: row.lawyer_profiles?.hourly_rate,
       practice_areas: row.lawyer_profiles?.practice_areas || [],
     },
   }));
@@ -324,7 +324,7 @@ export async function getAdminApplicationDetail(applicationId: string): Promise<
       avatar_url: data.lawyer_profiles?.profiles?.avatar_url || null,
       title: data.lawyer_profiles?.title || "Advocate",
       headline: data.lawyer_profiles?.headline || "",
-      hourly_rate: data.lawyer_profiles?.hourly_rate || 2500,
+      hourly_rate: data.lawyer_profiles?.hourly_rate,
       practice_areas: data.lawyer_profiles?.practice_areas || [],
     },
     documents: docsWithSignedUrls,

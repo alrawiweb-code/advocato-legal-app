@@ -47,28 +47,31 @@ export async function GET(
         throw error;
       }
 
-      // Unverified or suspended lawyers are not publicly accessible.
-      // However, if the currently authenticated user IS this lawyer,
-      // return 403 with their actual verification status so the UI
-      // can show a helpful, context-aware message instead of "Not Found".
-      if (l.verification_status === "SUSPENDED" || !l.is_verified) {
+      // Ineligible lawyers (unverified, suspended, or without an assigned positive rate)
+      // are not publicly accessible to clients.
+      const isEligible = l.is_verified && l.verification_status === "VERIFIED" && l.hourly_rate && l.hourly_rate > 0;
+      if (!isEligible) {
         if (user.id === l.id) {
-          // Own profile — return status context, not a generic 404
+          if (l.verification_status === "SUSPENDED" || !l.is_verified) {
+            // Own profile — return status context, not a generic 404
+            return NextResponse.json(
+              {
+                error: "profile_not_public",
+                verificationStatus: l.verification_status,
+                name: l.name,
+                isOwnProfile: true,
+              },
+              { status: 403 }
+            );
+          }
+          // Verified lawyer viewing own profile awaiting rate assignment continues to fullProfile
+        } else {
+          // External visitor — preserve existing marketplace privacy
           return NextResponse.json(
-            {
-              error: "profile_not_public",
-              verificationStatus: l.verification_status,
-              name: l.name,
-              isOwnProfile: true,
-            },
-            { status: 403 }
+            { error: "Lawyer not found" },
+            { status: 404 }
           );
         }
-        // External visitor — preserve existing marketplace privacy
-        return NextResponse.json(
-          { error: "Lawyer not found" },
-          { status: 404 }
-        );
       }
 
 

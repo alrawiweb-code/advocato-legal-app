@@ -253,7 +253,11 @@ function LawyerDashboardView() {
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="font-headline text-2xl sm:text-3xl font-bold text-primary">
-              ₹{(activeLawyer?.hourlyRate || 3500).toLocaleString("en-IN")} <span className="text-xs font-normal text-on-surface-variant">/ hr</span>
+              {activeLawyer?.hourlyRate ? (
+                <>₹{activeLawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-xs font-normal text-on-surface-variant">/ hr</span></>
+              ) : (
+                <span className="text-sm text-amber-600 font-semibold tracking-tight">Pending Admin Assignment</span>
+              )}
             </div>
             <p className="text-[11px] text-on-surface-variant mt-1">Your published consultation rate</p>
           </div>
@@ -642,7 +646,11 @@ function ClientHomeView() {
 
                     <div className="pt-4 mt-4 border-t border-hairline flex items-center justify-between text-xs">
                       <span className="font-semibold text-primary tabular-nums">
-                        ₹{lawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-[10px] text-on-surface-variant font-normal">/ hr</span>
+                        {lawyer.hourlyRate ? (
+                          <>₹{lawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-[10px] text-on-surface-variant font-normal">/ hr</span></>
+                        ) : (
+                          <span className="text-[11px] text-amber-600 font-medium">Pending Rate</span>
+                        )}
                       </span>
                       <span className="text-xs font-medium text-slate group-hover:underline inline-flex items-center gap-0.5">
                         <span>View Profile</span>

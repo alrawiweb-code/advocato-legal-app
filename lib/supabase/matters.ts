@@ -64,6 +64,24 @@ export async function createOrGetMatter(options: CreateMatterOptions): Promise<{
       return { matter: existing[0] as MatterRecord };
     }
 
+    // Verify lawyer eligibility before creating a new consultation
+    const { data: lawyerProfile, error: lawyerErr } = await supabase
+      .from("lawyer_profiles")
+      .select("is_verified, verification_status, hourly_rate")
+      .eq("id", options.lawyerId)
+      .single();
+
+    if (
+      lawyerErr ||
+      !lawyerProfile ||
+      !lawyerProfile.is_verified ||
+      lawyerProfile.verification_status !== "VERIFIED" ||
+      !lawyerProfile.hourly_rate ||
+      lawyerProfile.hourly_rate <= 0
+    ) {
+      return { matter: null, error: "This lawyer is not eligible for new consultations." };
+    }
+
     // Generate unique matter number
     const timestamp = Date.now().toString().slice(-6);
     const random = Math.floor(1000 + Math.random() * 9000);

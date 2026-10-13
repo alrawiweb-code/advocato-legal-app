@@ -15,6 +15,7 @@ import {
 import { useUserRole } from "@/lib/context/RoleContext";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { CaptchaWidget } from "@/components/ui/CaptchaWidget";
+import { LawyerRegistrationWizard } from "@/components/auth/LawyerRegistrationWizard";
 import { INDIAN_STATES } from "@/lib/data/lawyers";
 
 function LoginFormContent() {
@@ -59,7 +60,7 @@ function LoginFormContent() {
   const [barNumber, setBarNumber] = useState("");
   const [stateBar, setStateBar] = useState("Delhi (DL)");
   const [primaryPractice, setPrimaryPractice] = useState("Employment & Labor Law");
-  const [hourlyRate, setHourlyRate] = useState("2500");
+
   const [bio, setBio] = useState("");
 
   const [isRegistrationSuccess, setIsRegistrationSuccess] = useState(false);
@@ -134,50 +135,7 @@ function LoginFormContent() {
     }
   };
 
-  const handleRegisterLawyer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!lawyerName.trim() || !email.trim() || !barNumber.trim() || !password) {
-      setErrorMessage("Please fill in your name, email, bar number, and password.");
-      return;
-    }
-    if (password.length < 8) {
-      setErrorMessage("Password must be at least 8 characters long.");
-      return;
-    }
-    if (!captchaTokenLawyer) {
-      setErrorMessage("Please wait for CAPTCHA verification to complete.");
-      return;
-    }
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setIsSubmitting(true);
 
-    try {
-      const res = await registerLawyer({
-        name: lawyerName.trim(),
-        email: email.trim(),
-        barNumber: barNumber.trim(),
-        stateBar,
-        primaryPractice,
-        bio: bio.trim() || `Licensed attorney admitted to ${stateBar} specializing in ${primaryPractice}.`,
-        password: password,
-        captchaToken: captchaTokenLawyer,
-      });
-      if (res.success) {
-        if (res.requiresEmailConfirmation) {
-          setIsRegistrationSuccess(true);
-        } else {
-          router.push(getSafeRedirectForRole("lawyer"));
-        }
-      } else {
-        setErrorMessage(res.error || "Lawyer registration failed.");
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || "Lawyer registration failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 bg-surface min-h-[calc(100dvh-4rem)]">
@@ -459,153 +417,9 @@ function LoginFormContent() {
 
           {/* Mode 2: Lawyer Registration */}
           {authMode === "register" && selectedRoleTab === "lawyer" && (
-            <form onSubmit={handleRegisterLawyer} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-primary block">
-                  Full Name &amp; Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={lawyerName}
-                  onChange={(e) => setLawyerName(e.target.value)}
-                  placeholder="e.g. Adv. Priya Sen"
-                  className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-primary block">
-                    Bar Council Number
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={barNumber}
-                    onChange={(e) => setBarNumber(e.target.value)}
-                    placeholder="D/1234/2015"
-                    className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-primary block">
-                    State Bar Council
-                  </label>
-                  <select
-                    value={stateBar}
-                    onChange={(e) => setStateBar(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  >
-                    {INDIAN_STATES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-primary block">
-                    Primary Practice Area
-                  </label>
-                  <select
-                    value={primaryPractice}
-                    onChange={(e) => setPrimaryPractice(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  >
-                    <option value="Corporate & M&A">Corporate &amp; M&amp;A</option>
-                    <option value="Employment & Labor Law">Employment &amp; Labor Law</option>
-                    <option value="Criminal Defense">Criminal Defense</option>
-                    <option value="Real Estate & Property">Real Estate &amp; Property</option>
-                    <option value="Intellectual Property">Intellectual Property</option>
-                    <option value="Family & Matrimonial">Family &amp; Matrimonial</option>
-                    <option value="Commercial Litigation">Commercial Litigation</option>
-                    <option value="Constitutional Law">Constitutional Law</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-primary block">
-                    Hourly Fee (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min={500}
-                    step={100}
-                    value={hourlyRate}
-                    onChange={(e) => setHourlyRate(e.target.value)}
-                    placeholder="2500"
-                    className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-primary block">
-                  Professional Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="counsel@chambers.in"
-                  className="w-full px-3 py-2.5 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-primary block">
-                  Password
-                </label>
-                <PasswordInput
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="Min 8 characters"
-                  required
-                  minLength={8}
-                  showStrength
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-primary block">
-                  Brief Bio / Trial Credentials
-                </label>
-                <textarea
-                  rows={2}
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Brief summary of trial experience, court appearances, and advisory specialization."
-                  className="w-full px-3 py-2 rounded-xl border border-hairline bg-surface text-primary text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-on-surface-variant/50 resize-none"
-                />
-              </div>
-
-              <CaptchaWidget
-                action="lawyer-signup"
-                onVerify={(token) => setCaptchaTokenLawyer(token)}
-                onExpire={() => setCaptchaTokenLawyer(null)}
-              />
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-brass hover:bg-brass-hover text-white font-semibold text-xs py-3 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <span>Registering Bar Admission...</span>
-                ) : (
-                  <>
-                    <span>Submit Attorney Admission</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
+            <div className="-mx-6 sm:-mx-8">
+              <LawyerRegistrationWizard onCancel={() => setAuthMode("signin")} />
+            </div>
           )}
           </>
           )}

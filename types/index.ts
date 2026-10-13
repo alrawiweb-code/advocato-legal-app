@@ -77,7 +77,7 @@ export interface Lawyer {
   rating: number;
   reviewCount: number;
   verifiedReviewCount?: number; // Phase 2: Separately tracked
-  hourlyRate: number;
+  hourlyRate: number | null;
   isVerified: boolean;
   verificationStatus?: VerificationStatus; // Phase 2: Richer status
   availability: "Available today" | "Next week" | "This week" | "Not accepting";

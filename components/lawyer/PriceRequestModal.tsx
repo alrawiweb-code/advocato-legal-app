@@ -10,7 +10,7 @@ export function PriceRequestModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  currentRate: number;
+  currentRate: number | null;
 }) {
   const [requestedRate, setRequestedRate] = useState<number | "">("");
   const [reason, setReason] = useState("");
@@ -110,7 +110,13 @@ export function PriceRequestModal({
               <h3 className="font-semibold text-primary text-lg mb-2">Request Pending Review</h3>
               <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
                 You have already submitted a request to change your rate from{" "}
-                <strong>₹{existingRequest.current_rate?.toLocaleString("en-IN") || currentRate.toLocaleString("en-IN")}/hr</strong> to{" "}
+                <strong>
+                  {existingRequest.current_rate
+                    ? `₹${existingRequest.current_rate.toLocaleString("en-IN")}/hr`
+                    : currentRate
+                    ? `₹${currentRate.toLocaleString("en-IN")}/hr`
+                    : "Pending Assignment"}
+                </strong> to{" "}
                 <strong>₹{existingRequest.requested_rate.toLocaleString("en-IN")}/hr</strong>.
               </p>
               <div className="bg-surface-container-low border border-hairline rounded-lg p-4 text-left text-xs text-on-surface-variant italic">
@@ -125,7 +131,9 @@ export function PriceRequestModal({
               <div className="bg-surface-container-low p-4 rounded-xl flex items-center justify-between border border-hairline">
                 <div>
                   <p className="text-xs font-semibold text-outline uppercase tracking-wider mb-1">Current Official Rate</p>
-                  <p className="text-xl font-bold text-primary">₹{currentRate.toLocaleString("en-IN")}/hr</p>
+                  <p className="text-xl font-bold text-primary">
+                    {currentRate ? `₹${currentRate.toLocaleString("en-IN")}/hr` : "Pending Assignment"}
+                  </p>
                 </div>
                 <ArrowRight className="w-5 h-5 text-outline" />
                 <div className="text-right">

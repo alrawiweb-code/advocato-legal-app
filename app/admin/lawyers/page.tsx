@@ -25,7 +25,7 @@ interface LawyerRosterItem {
   bar_number: string;
   state_bar: string;
   practice_areas: string[];
-  hourly_rate: number;
+  hourly_rate: number | null;
   is_verified: boolean;
   verification_status: string;
   suspension_reason: string | null;
@@ -102,7 +102,7 @@ export default function AdminLawyersPage() {
           bar_number: d.bar_number || "Not set",
           state_bar: d.state_bar || "Delhi (DL)",
           practice_areas: d.practice_areas || [],
-          hourly_rate: d.hourly_rate || 2500,
+          hourly_rate: d.hourly_rate,
           is_verified: Boolean(d.is_verified),
           verification_status:
             d.verification_status || (d.is_verified ? "VERIFIED" : "NOT_VERIFIED"),
@@ -357,7 +357,13 @@ export default function AdminLawyersPage() {
                       </td>
 
                       <td className="py-4 px-4 font-semibold text-primary">
-                        ₹{lawyer.hourly_rate.toLocaleString("en-IN")}/hr
+                        {lawyer.hourly_rate ? (
+                          `₹${lawyer.hourly_rate.toLocaleString("en-IN")}/hr`
+                        ) : (
+                          <span className="text-xs text-amber-600 font-semibold tracking-tight">
+                            Pending Assignment
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-4 px-4">{getStatusBadge(lawyer)}</td>

@@ -127,7 +127,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             title: lp.title || "Advocate",
             headline: lp.headline || `${lp.practice_areas?.[0] || "General"} Specialist`,
             yearsExperience: lp.years_experience || 5,
-            hourlyRate: lp.hourly_rate || 2500,
+            hourlyRate: lp.hourly_rate,
             isVerified: isLawyerVerified,
             verificationStatus: lawyerVerificationStatus,
             availability: (lp.availability as any) || "Available today",
@@ -291,7 +291,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             full_name: data.name.trim(),
             role: "client",
           },
-          emailRedirectTo: `${window.location.origin}/auth/verify-success`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/auth/verify-success`,
         },
       });
 
@@ -357,7 +357,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             bar_number: data.barNumber.trim(),
             jurisdiction: data.stateBar,
           },
-          emailRedirectTo: `${window.location.origin}/auth/verify-success`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/auth/verify-success`,
         },
       });
 
