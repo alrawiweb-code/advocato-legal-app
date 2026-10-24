@@ -10,6 +10,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Role verification: caller must be a genuine lawyer in profiles table (fail-closed)
+    const { data: callerProfile, error: profileRoleErr } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileRoleErr || !callerProfile || callerProfile.role !== "lawyer") {
+      return NextResponse.json(
+        { error: "Forbidden: Only lawyers can submit rate change requests." },
+        { status: 403 }
+      );
+    }
+
     // Get current lawyer profile to find current rate
     const { data: lawyerProfile, error: profileErr } = await supabase
       .from("lawyer_profiles")
@@ -60,6 +74,20 @@ export async function GET() {
     const { data: { user }, error: userErr } = await supabase.auth.getUser();
     if (userErr || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Role verification: caller must be a genuine lawyer in profiles table (fail-closed)
+    const { data: callerProfile, error: profileRoleErr } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileRoleErr || !callerProfile || callerProfile.role !== "lawyer") {
+      return NextResponse.json(
+        { error: "Forbidden: Only lawyers can view rate change requests." },
+        { status: 403 }
+      );
     }
 
     const { data: requests, error } = await supabase

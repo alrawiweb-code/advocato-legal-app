@@ -15,14 +15,94 @@ import {
   LogOut,
   Briefcase,
   User,
+  KeyRound,
+  AlertCircle,
 } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { formatPersonaName } from "@/lib/utils/formatters";
+import { EditProfileModal } from "@/components/lawyer/EditProfileModal";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { role, currentUser, isSupabaseConnected, activeLawyer, logout } = useUserRole();
+  const { role, currentUser, isSupabaseConnected, activeLawyer, setMyLawyerProfile, logout } = useUserRole();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  // Change Password state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState<string | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      setPasswordChangeError("Please enter your current password.");
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setPasswordChangeError("New password must be at least 8 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError("The new passwords do not match. Please verify both fields.");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordChangeError("The new password must be different from your current password.");
+      return;
+    }
+
+    setPasswordChangeError(null);
+    setPasswordChangeSuccess(null);
+    setIsChangingPassword(true);
+
+    try {
+      const supabase = createClient();
+
+      // Step 1: Verify current credentials to satisfy re-authentication security requirements
+      if (!currentUser.email) {
+        setPasswordChangeError("Session user email not detected. Please refresh the page.");
+        setIsChangingPassword(false);
+        return;
+      }
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword,
+      });
+
+      if (verifyError) {
+        setPasswordChangeError("Current password is incorrect. Please verify your current credentials.");
+        setIsChangingPassword(false);
+        return;
+      }
+
+      // Step 2: Update password in Supabase Auth
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        setPasswordChangeError(updateError.message || "Failed to update password. Please try again.");
+        setIsChangingPassword(false);
+        return;
+      }
+
+      setPasswordChangeSuccess("Password updated successfully. Your account is secured with your new password.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPasswordChangeError(err.message || "An unexpected error occurred while updating your password.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
 
   const initials = currentUser.name
     ? currentUser.name
@@ -58,8 +138,12 @@ export default function ProfilePage() {
             {/* Authenticated Identity Card */}
             <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-hairline shadow-xs flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg sm:text-xl shrink-0 shadow-xs">
-                  {initials}
+                <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg sm:text-xl shrink-0 shadow-xs overflow-hidden">
+                  {currentUser.avatar && !currentUser.avatar.startsWith("data:image/svg+xml") ? (
+                    <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    initials
+                  )}
                 </div>
                 <div className="min-w-0">
                   <h2 className="font-headline text-base sm:text-lg font-semibold text-primary truncate">{formatPersonaName(currentUser.name, role)}</h2>
@@ -195,6 +279,107 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* Security & Password Card */}
+            <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-hairline shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-brass" />
+                  <h3 className="text-xs uppercase font-semibold tracking-wider text-primary">
+                    Security &amp; Password
+                  </h3>
+                </div>
+                <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Protected
+                </span>
+              </div>
+
+              <p className="text-[11px] text-on-surface-variant">
+                Change your account password. For security, you must provide your current password to authorize changes.
+              </p>
+
+              {passwordChangeError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                  <div className="flex-1 leading-relaxed">{passwordChangeError}</div>
+                </div>
+              )}
+
+              {passwordChangeSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                  <div className="flex-1 leading-relaxed">{passwordChangeSuccess}</div>
+                </div>
+              )}
+
+              <form onSubmit={handleChangePassword} className="space-y-3.5 pt-1">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-primary block">
+                    Current Password
+                  </label>
+                  <PasswordInput
+                    value={currentPassword}
+                    onChange={setCurrentPassword}
+                    placeholder="Enter current password"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-primary block">
+                    New Password
+                  </label>
+                  <PasswordInput
+                    value={newPassword}
+                    onChange={setNewPassword}
+                    placeholder="Min. 8 characters"
+                    required
+                    showStrength={true}
+                    minLength={8}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-primary block">
+                    Confirm New Password
+                  </label>
+                  <PasswordInput
+                    value={confirmPassword}
+                    onChange={setConfirmPassword}
+                    placeholder="Re-enter new password"
+                    required
+                    minLength={8}
+                  />
+                  {confirmPassword && newPassword !== confirmPassword && (
+                    <p className="text-[11px] text-red-600 font-medium">
+                      Passwords do not match.
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={
+                      isChangingPassword ||
+                      !currentPassword ||
+                      newPassword.length < 8 ||
+                      newPassword !== confirmPassword
+                    }
+                    className="w-full bg-primary hover:bg-primary/95 text-white font-semibold text-xs py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 min-h-[42px]"
+                  >
+                    {isChangingPassword ? (
+                      <span>Updating Password...</span>
+                    ) : (
+                      <>
+                        <span>Update Password</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+
             {/* Quick Links Scoped to Current Role */}
             <div className="bg-surface-container-lowest p-5 sm:p-6 rounded-2xl border border-hairline shadow-xs space-y-3">
               <h3 className="text-xs uppercase font-semibold tracking-wider text-on-surface-variant">
@@ -224,13 +409,23 @@ export default function ProfilePage() {
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   {activeLawyer && (
-                    <Link
-                      href={`/lawyers/${activeLawyer.id}`}
-                      className="flex items-center justify-between text-xs font-semibold text-primary hover:text-brass py-2.5 transition-colors"
-                    >
-                      <span>Public Lawyer Profile</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowEditModal(true)}
+                        className="w-full flex items-center justify-between text-xs font-semibold text-primary hover:text-brass py-2.5 border-b border-hairline transition-colors text-left"
+                      >
+                        <span>Edit Professional Profile</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                      <Link
+                        href={`/lawyers/${activeLawyer.id}`}
+                        className="flex items-center justify-between text-xs font-semibold text-primary hover:text-brass py-2.5 transition-colors"
+                      >
+                        <span>{activeLawyer.isVerified ? "Public Lawyer Profile" : "Preview Lawyer Profile"}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </>
                   )}
                 </>
               ) : (
@@ -272,6 +467,17 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {showEditModal && activeLawyer && (
+        <EditProfileModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          lawyer={activeLawyer}
+          onProfileUpdated={(updated) => {
+            setMyLawyerProfile(updated);
+          }}
+        />
+      )}
     </div>
   );
 }

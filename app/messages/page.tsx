@@ -23,6 +23,7 @@ import {
   ArrowLeft,
   Lock,
   Calendar,
+  Clock,
   Info,
   Plus,
   Scale,
@@ -47,7 +48,7 @@ import { Consultation, ConsultationMessage, DocumentAttachment, Lawyer } from "@
 import { formatAdvocateName } from "@/lib/utils/formatters";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import { createClient } from "@/lib/supabase/client";
-import { getUserMatters } from "@/lib/supabase/matters";
+import { getUserMatters, createOrGetMatter } from "@/lib/supabase/matters";
 import { uploadEvidentiaryDocument, uploadVoiceNoteBlob } from "@/lib/storage/documents";
 import { VideoConsultationRoom } from "@/components/consultation/VideoConsultationRoom";
 
@@ -99,6 +100,53 @@ function MessagesView() {
   const [phoneIsMuted, setPhoneIsMuted] = useState(false);
   const [copiedBridgePin, setCopiedBridgePin] = useState(false);
 
+  // Phase 3: Booking & Reschedule Modal State
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [declineReasonInput, setDeclineReasonInput] = useState("");
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleDateInput, setRescheduleDateInput] = useState("");
+  const [rescheduleReasonInput, setRescheduleReasonInput] = useState("");
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Phase 4: Join window live clock & verification state
+  const [liveNow, setLiveNow] = useState<Date>(new Date());
+  const [isCheckingJoin, setIsCheckingJoin] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => setLiveNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Phase 4: Helper to calculate join window state
+  const getJoinWindowState = (consultation: Consultation | null | undefined) => {
+    if (!consultation || !consultation.appointmentDate) return { state: "no_appointment" as const };
+    if (
+      consultation.rescheduleStatus === "pending_client" ||
+      consultation.rescheduleStatus === "pending_lawyer"
+    ) {
+      return { state: "reschedule_pending" as const };
+    }
+    if (consultation.status !== "confirmed" && consultation.status !== "in_progress") {
+      return { state: "not_confirmed" as const };
+    }
+
+    const apptTime = new Date(consultation.appointmentDate).getTime();
+    const durationMs = (consultation.durationMinutes || 45) * 60 * 1000;
+    const windowStart = apptTime - 5 * 60 * 1000; // T - 5m
+    const windowEnd = apptTime + durationMs + 15 * 60 * 1000; // T + duration + 15m
+    const now = liveNow.getTime();
+
+    if (now < windowStart) {
+      const diffSec = Math.max(0, Math.floor((windowStart - now) / 1000));
+      return { state: "too_early" as const, diffSec, windowStart: new Date(windowStart) };
+    }
+    if (now > windowEnd) {
+      return { state: "window_closed" as const, windowEnd: new Date(windowEnd) };
+    }
+    return { state: "open" as const, windowEnd: new Date(windowEnd) };
+  };
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (phoneCallConnected) {
@@ -130,8 +178,19 @@ function MessagesView() {
         if (!error && dbMatters && dbMatters.length > 0) {
           activeList = dbMatters.map((m) => {
             const counselorName = m.lawyer?.full_name || "Assigned Counsel";
+            const lp = Array.isArray(m.lawyer?.lawyer_profiles)
+              ? m.lawyer.lawyer_profiles[0]
+              : m.lawyer?.lawyer_profiles;
+            const hourlyRate = lp?.hourly_rate ?? null;
+            const ia = Array.isArray(m.intake_assessments)
+              ? m.intake_assessments[0]
+              : m.intake_assessments;
+            const intakeBrief = ia?.summary || undefined;
+
             return {
               id: m.id,
+              clientId: m.client_id,
+              lawyerId: m.lawyer_id,
               matterNumber: m.matter_number,
               caseTitle: m.case_title,
               category: m.category,
@@ -139,21 +198,31 @@ function MessagesView() {
               clientName: m.client?.full_name || "Client",
               appointmentDate: m.appointment_date || undefined,
               consultationType: (m.consultation_type as any) || undefined,
+              durationMinutes: m.duration_minutes || 45,
+              clientJoinedAt: m.client_joined_at || null,
+              lawyerJoinedAt: m.lawyer_joined_at || null,
+              declineReason: m.decline_reason || null,
+              proposedRescheduleDate: m.proposed_reschedule_date || null,
+              rescheduleRequestedBy: m.reschedule_requested_by || null,
+              rescheduleStatus: (m.reschedule_status as any) || "none",
+              rescheduleReason: m.reschedule_reason || null,
+              originalAppointmentDate: m.original_appointment_date || null,
+              intakeBrief: intakeBrief,
               lawyer: {
                 id: m.lawyer?.id || m.lawyer_id,
                 name: counselorName,
-                title: `${m.category} Attorney`,
+                title: lp?.title || `${m.category} Attorney`,
                 avatar: m.lawyer?.avatar_url || getInitialsAvatar(counselorName),
-                rating: 5.0,
-                reviewCount: 1,
-                hourlyRate: null,
+                rating: lp?.rating ? Number(lp.rating) : 5.0,
+                reviewCount: lp?.review_count ?? 1,
+                hourlyRate: hourlyRate,
                 isVerified: true,
                 availability: "Available today",
-                yearsExperience: 5,
+                yearsExperience: lp?.years_experience ?? 5,
                 jurisdiction: m.jurisdiction || "Delhi (DL)",
                 tags: [m.category],
                 practiceAreas: [m.category],
-                bio: "Licensed counsel handling active matter.",
+                bio: lp?.bio || "Licensed counsel handling active matter.",
                 notableCases: [],
               },
               messages: [],
@@ -363,28 +432,233 @@ function MessagesView() {
     setMobileShowChat(true);
   };
 
-  const handleStartConsultationWithLawyer = (lawyer: Lawyer) => {
-    const cons = getOrCreateConsultationForLawyer(lawyer.id);
-    const updated = [cons, ...consultations.filter((c) => c.id !== cons.id)];
-    setConsultations(updated);
-    saveStoredConsultations(updated);
-    setActiveMatterId(cons.id);
-    setMobileShowChat(true);
-    setShowNewConsultationModal(false);
+  const handleStartConsultationWithLawyer = async (lawyer: Lawyer) => {
+    setIsActionSubmitting(true);
+    setActionError(null);
+    try {
+      const { matter, error } = await createOrGetMatter({
+        lawyerId: lawyer.id,
+        category: lawyer.practiceAreas?.[0] || lawyer.tags?.[0] || "General Legal",
+        caseTitle: `Consultation with ${formatAdvocateName(lawyer.name)}`,
+      });
+
+      if (error || !matter) {
+        setActionError(error || "Failed to start conversation with lawyer.");
+        return;
+      }
+
+      const existing = consultations.find((c) => c.id === matter.id);
+      if (existing) {
+        setActiveMatterId(existing.id);
+      } else {
+        const newCons: Consultation = {
+          id: matter.id,
+          clientId: matter.client_id,
+          lawyerId: matter.lawyer_id,
+          matterNumber: matter.matter_number,
+          caseTitle: matter.case_title,
+          category: matter.category,
+          status: (matter.status as any) || "active",
+          clientName: currentUser.name || "Client",
+          appointmentDate: matter.appointment_date || undefined,
+          consultationType: (matter.consultation_type as any) || undefined,
+          durationMinutes: matter.duration_minutes || 45,
+          rescheduleStatus: (matter.reschedule_status as any) || "none",
+          lastActive: "Just now",
+          lawyer: {
+            id: lawyer.id,
+            name: lawyer.name,
+            title: lawyer.title,
+            avatar: lawyer.avatar,
+            rating: lawyer.rating || 5.0,
+            reviewCount: lawyer.reviewCount || 1,
+            hourlyRate: lawyer.hourlyRate,
+            isVerified: lawyer.isVerified,
+            availability: lawyer.availability,
+            yearsExperience: lawyer.yearsExperience,
+            jurisdiction: lawyer.jurisdiction,
+            tags: lawyer.tags || [],
+            practiceAreas: lawyer.practiceAreas || [],
+            bio: lawyer.bio || "",
+            notableCases: [],
+          },
+          messages: [],
+        };
+        setConsultations((prev) => [newCons, ...prev]);
+        setActiveMatterId(newCons.id);
+      }
+      setMobileShowChat(true);
+      setShowNewConsultationModal(false);
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to initialize conversation.");
+    } finally {
+      setIsActionSubmitting(false);
+    }
   };
 
-  const handleCallStart = (type: "video" | "phone") => {
-    setActiveCallModal(type);
-    const supabase = createClient();
-    supabase.channel(`matter-chat-${activeMatterId}`).send({
-      type: "broadcast",
-      event: "incoming-call",
-      payload: { 
-        callType: type, 
-        senderRole: role, 
-        senderName: role === "lawyer" ? (activeConsultation?.lawyer.name || "Attorney") : (currentUser.name || "Client") 
-      },
-    });
+  const handleBookingAction = async (
+    action: string,
+    payload: { reason?: string; proposedDate?: string } = {}
+  ) => {
+    if (!activeConsultation) return;
+    setIsActionSubmitting(true);
+    setActionError(null);
+
+    try {
+      const res = await fetch("/api/consultation/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matterId: activeConsultation.id,
+          action,
+          reason: payload.reason,
+          proposedDate: payload.proposedDate
+            ? new Date(payload.proposedDate).toISOString()
+            : undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setActionError(data.error || "Action failed.");
+        setIsActionSubmitting(false);
+        return;
+      }
+
+      if (data.matter) {
+        const m = data.matter;
+        setConsultations((prev) =>
+          prev.map((c) =>
+            c.id === m.id
+              ? {
+                  ...c,
+                  status: m.status,
+                  appointmentDate: m.appointment_date || undefined,
+                  declineReason: m.decline_reason || null,
+                  proposedRescheduleDate: m.proposed_reschedule_date || null,
+                  rescheduleRequestedBy: m.reschedule_requested_by || null,
+                  rescheduleStatus: m.reschedule_status || "none",
+                  rescheduleReason: m.reschedule_reason || null,
+                }
+              : c
+          )
+        );
+      }
+
+      setShowDeclineModal(false);
+      setShowRescheduleModal(false);
+      setDeclineReasonInput("");
+      setRescheduleDateInput("");
+      setRescheduleReasonInput("");
+
+      // Trigger re-fetch of messages for this matter
+      if (activeMatterId) {
+        const supabase = createClient();
+        supabase
+          .from("messages")
+          .select("*")
+          .eq("matter_id", activeMatterId)
+          .order("created_at", { ascending: true })
+          .then(({ data: msgs }) => {
+            if (msgs) {
+              const mappedMsgs: ConsultationMessage[] = msgs.map((m) => ({
+                id: m.id,
+                senderRole: m.sender_role as "lawyer" | "client",
+                senderName:
+                  m.sender_role === "lawyer"
+                    ? activeConsultation.lawyer.name
+                    : activeConsultation.clientName || "Client",
+                senderAvatar:
+                  m.sender_role === "lawyer"
+                    ? activeConsultation.lawyer.avatar
+                    : undefined,
+                text: m.text,
+                timestamp: new Date(m.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                status: m.status as any,
+                isVoiceNote: m.is_voice_note,
+                audioDuration: m.audio_duration,
+                audioUrl: m.audio_url,
+                audioStoragePath: m.audio_storage_path,
+                reactions: m.reactions || [],
+              }));
+              setConsultations((prev) =>
+                prev.map((c) =>
+                  c.id === activeMatterId ? { ...c, messages: mappedMsgs } : c
+                )
+              );
+            }
+          });
+      }
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to process request.");
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const handleCallStart = async (type: "video" | "phone") => {
+    if (!activeMatterId) return;
+
+    // Phase 4: Client-side quick feedback check
+    const windowInfo = getJoinWindowState(activeConsultation);
+    if (windowInfo.state === "too_early") {
+      const mins = Math.floor(windowInfo.diffSec / 60);
+      const secs = windowInfo.diffSec % 60;
+      const timeStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+      setActionError(`Consultation room opens 5 minutes before scheduled start (in ${timeStr}).`);
+      return;
+    }
+    if (windowInfo.state === "window_closed") {
+      setActionError("The 15-minute late joining window for this consultation has closed. Please reschedule.");
+      return;
+    }
+    if (windowInfo.state === "reschedule_pending") {
+      setActionError("Cannot enter room while a reschedule proposal is pending response.");
+      return;
+    }
+    if (windowInfo.state === "not_confirmed") {
+      setActionError(`Consultation must be confirmed before joining (Status: ${activeConsultation?.status || "pending"}).`);
+      return;
+    }
+
+    // Phase 4: Server-Side Join Authorization & Atomic Attendance Recording
+    setIsCheckingJoin(true);
+    setActionError(null);
+
+    try {
+      const res = await fetch("/api/consultation/join-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matterId: activeMatterId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setActionError(data.error || "Access to consultation room denied.");
+        return;
+      }
+
+      // Success: Server authorized entry and logged attendance
+      setActiveCallModal(type);
+
+      const supabase = createClient();
+      supabase.channel(`matter-chat-${activeMatterId}`).send({
+        type: "broadcast",
+        event: "incoming-call",
+        payload: { 
+          callType: type, 
+          senderRole: role, 
+          senderName: role === "lawyer" ? (activeConsultation?.lawyer.name || "Attorney") : (currentUser.name || "Client") 
+        },
+      });
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to connect to consultation server.");
+    } finally {
+      setIsCheckingJoin(false);
+    }
   };
 
   // Broadcast typing indicator
@@ -1045,26 +1319,248 @@ function MessagesView() {
               </div>
             </div>
 
-            {/* Scheduled Consultation / Escrow Banner */}
-            {activeConsultation.appointmentDate && (
-              <div className="bg-brass/10 border-b border-brass/30 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs relative z-10 shrink-0">
-                <div className="flex items-center gap-2 text-primary font-medium">
-                  <Calendar className="w-3.5 h-3.5 text-brass shrink-0" />
-                  <span>
-                    Scheduled: <strong>{activeConsultation.appointmentDate}</strong> ({activeConsultation.consultationType || "Video"} Consultation)
-                  </span>
-                  {activeConsultation.lawyer.hourlyRate ? (
-                    <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                      Pre-Authorized Escrow (₹{activeConsultation.lawyer.hourlyRate.toLocaleString("en-IN")})
-                    </span>
-                  ) : null}
-                </div>
-                <button
-                  onClick={() => handleCallStart(activeConsultation.consultationType === "phone" ? "phone" : "video")}
-                  className="px-2.5 py-1 rounded bg-brass text-white text-[11px] font-semibold hover:bg-brass-hover transition-colors shadow-2xs"
-                >
-                  Join Meeting
+            {/* Phase 3 Booking & Reschedule Lifecycle Banners */}
+            {actionError && (
+              <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 text-xs text-red-600 flex items-center justify-between">
+                <span>{actionError}</span>
+                <button onClick={() => setActionError(null)} className="text-red-500 hover:text-red-700">
+                  <X className="w-3.5 h-3.5" />
                 </button>
+              </div>
+            )}
+
+            {/* State A: Pending Consultation Request */}
+            {activeConsultation.status === "pending" && (
+              <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs relative z-10 shrink-0">
+                <div className="flex items-center gap-2 text-primary">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-amber-900 block sm:inline">
+                      {role === "lawyer" ? "New Consultation Request:" : "Consultation Request Pending:"}
+                    </span>{" "}
+                    <span className="text-on-surface">
+                      {role === "lawyer" ? (
+                        <>
+                          Requested by <strong>{activeConsultation.clientName}</strong> for{" "}
+                          <strong>
+                            {activeConsultation.appointmentDate
+                              ? new Date(activeConsultation.appointmentDate).toLocaleString([], {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                })
+                              : "scheduled slot"}
+                          </strong>{" "}
+                          via {activeConsultation.consultationType === "phone" ? "Phone Call" : "Video"}
+                        </>
+                      ) : (
+                        <>
+                          Awaiting confirmation from Advocate {formatAdvocateName(activeConsultation.lawyer.name)} for{" "}
+                          <strong>
+                            {activeConsultation.appointmentDate
+                              ? new Date(activeConsultation.appointmentDate).toLocaleString([], {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                })
+                              : "scheduled slot"}
+                          </strong>.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {role === "lawyer" ? (
+                    <>
+                      <button
+                        onClick={() => handleBookingAction("accept_booking")}
+                        disabled={isActionSubmitting}
+                        className="px-3 py-1 rounded bg-brass text-white text-xs font-semibold hover:bg-brass-hover transition-colors shadow-2xs disabled:opacity-50"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActionError(null);
+                          setShowRescheduleModal(true);
+                        }}
+                        disabled={isActionSubmitting}
+                        className="px-2.5 py-1 rounded bg-surface-container-lowest border border-hairline text-primary text-xs font-semibold hover:bg-surface-container transition-colors disabled:opacity-50"
+                      >
+                        Reschedule
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActionError(null);
+                          setShowDeclineModal(true);
+                        }}
+                        disabled={isActionSubmitting}
+                        className="px-2.5 py-1 rounded bg-red-500/10 text-red-600 border border-red-500/20 text-xs font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Decline
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleBookingAction("cancel_booking")}
+                      disabled={isActionSubmitting}
+                      className="px-2.5 py-1 rounded bg-surface-container-lowest text-red-600 border border-red-500/20 text-xs font-semibold hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    >
+                      Cancel Request
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* State B: Active Reschedule Proposal Pending */}
+            {(activeConsultation.rescheduleStatus === "pending_client" || activeConsultation.rescheduleStatus === "pending_lawyer") && (
+              <div className="bg-amber-50 border-b border-amber-300 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs relative z-10 shrink-0">
+                <div className="flex items-center gap-2 text-primary">
+                  <Calendar className="w-4 h-4 text-amber-700 shrink-0" />
+                  <div>
+                    <span className="font-bold text-amber-900 block sm:inline">
+                      Reschedule Proposed:
+                    </span>{" "}
+                    <span className="text-on-surface">
+                      New time:{" "}
+                      <strong>
+                        {activeConsultation.proposedRescheduleDate
+                          ? new Date(activeConsultation.proposedRescheduleDate).toLocaleString([], {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : "Pending Slot"}
+                      </strong>
+                      {activeConsultation.rescheduleReason && (
+                        <span className="italic text-on-surface-variant block sm:inline sm:ml-1">
+                          — &ldquo;{activeConsultation.rescheduleReason}&rdquo;
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Check if current user is the counter-party */}
+                  {((activeConsultation.rescheduleStatus === "pending_client" && role === "client") ||
+                    (activeConsultation.rescheduleStatus === "pending_lawyer" && role === "lawyer")) ? (
+                    <>
+                      <button
+                        onClick={() => handleBookingAction("accept_reschedule")}
+                        disabled={isActionSubmitting}
+                        className="px-3 py-1 rounded bg-brass text-white text-xs font-semibold hover:bg-brass-hover transition-colors shadow-2xs disabled:opacity-50"
+                      >
+                        Accept New Time
+                      </button>
+                      <button
+                        onClick={() => handleBookingAction("decline_reschedule")}
+                        disabled={isActionSubmitting}
+                        className="px-2.5 py-1 rounded bg-surface-container-lowest border border-hairline text-red-600 text-xs font-semibold hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                      >
+                        Decline
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-[11px] text-amber-800 font-medium">
+                      Awaiting response from counter-party
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* State C: Confirmed Consultation (No active reschedule pending) */}
+            {(activeConsultation.status === "confirmed" || activeConsultation.status === "scheduled" || activeConsultation.status === "in_progress") &&
+              activeConsultation.rescheduleStatus !== "pending_client" &&
+              activeConsultation.rescheduleStatus !== "pending_lawyer" && (
+                <div className="bg-brass/10 border-b border-brass/30 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs relative z-10 shrink-0">
+                  <div className="flex items-center gap-2 text-primary font-medium">
+                    <Calendar className="w-3.5 h-3.5 text-brass shrink-0" />
+                    <span>
+                      Confirmed:{" "}
+                      <strong>
+                        {activeConsultation.appointmentDate
+                          ? new Date(activeConsultation.appointmentDate).toLocaleString([], {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : "Scheduled Slot"}
+                      </strong>{" "}
+                      ({activeConsultation.consultationType === "phone" ? "Phone Call" : "Video"} Consultation)
+                    </span>
+                    {activeConsultation.lawyer.hourlyRate ? (
+                      <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        Pre-Authorized (₹{activeConsultation.lawyer.hourlyRate.toLocaleString("en-IN")})
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setActionError(null);
+                        setShowRescheduleModal(true);
+                      }}
+                      className="px-2 py-1 rounded bg-surface-container-lowest border border-hairline text-[11px] font-semibold text-primary hover:bg-surface-container transition-colors"
+                    >
+                      Reschedule
+                    </button>
+                    {(() => {
+                      const windowInfo = getJoinWindowState(activeConsultation);
+                      if (windowInfo.state === "too_early") {
+                        const mins = Math.floor(windowInfo.diffSec / 60);
+                        const secs = windowInfo.diffSec % 60;
+                        const timeStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+                        return (
+                          <button
+                            disabled
+                            title={`Room opens at ${windowInfo.windowStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (5m early entry buffer)`}
+                            className="px-2.5 py-1 rounded bg-surface-container border border-hairline text-on-surface-variant text-[11px] font-semibold opacity-70 cursor-not-allowed flex items-center gap-1.5"
+                          >
+                            <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                            <span>Opens in {timeStr}</span>
+                          </button>
+                        );
+                      }
+                      if (windowInfo.state === "window_closed") {
+                        return (
+                          <span className="px-2.5 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-600 text-[11px] font-semibold flex items-center gap-1">
+                            <Lock className="w-3 h-3" />
+                            <span>Window Closed</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          onClick={() => handleCallStart(activeConsultation.consultationType === "phone" ? "phone" : "video")}
+                          disabled={isCheckingJoin}
+                          className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-all shadow-xs flex items-center gap-1.5 animate-pulse disabled:opacity-50"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-white" />
+                          <span>{isCheckingJoin ? "Verifying..." : "Join Meeting"}</span>
+                        </button>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+            {/* State D: Declined Consultation */}
+            {activeConsultation.status === "declined" && (
+              <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>
+                  Consultation Request Declined
+                  {activeConsultation.declineReason ? `: "${activeConsultation.declineReason}"` : "."}
+                </span>
+              </div>
+            )}
+
+            {/* State E: Cancelled Consultation */}
+            {activeConsultation.status === "cancelled" && (
+              <div className="bg-surface-container border-b border-hairline px-4 py-2 text-xs text-on-surface-variant flex items-center gap-2">
+                <X className="w-4 h-4 text-on-surface-variant shrink-0" />
+                <span>Consultation Cancelled by Client.</span>
               </div>
             )}
 
@@ -1604,6 +2100,118 @@ function MessagesView() {
           onClose={() => setActiveCallModal(null)}
           audioOnly={true}
         />
+      )}
+
+      {/* Phase 3: Decline Request Modal */}
+      {showDeclineModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl border border-hairline shadow-editorial max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-hairline">
+              <h3 className="text-sm font-bold text-primary font-headline">Decline Consultation Request</h3>
+              <button onClick={() => setShowDeclineModal(false)} className="text-on-surface-variant hover:text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {actionError && (
+              <div className="mb-4 p-2.5 bg-red-500/10 border border-red-500/20 text-red-600 rounded-lg text-xs">
+                {actionError}
+              </div>
+            )}
+            <p className="text-xs text-on-surface-variant mb-3">
+              You are declining this consultation request. You may optionally provide a reason to inform the client.
+            </p>
+            <textarea
+              value={declineReasonInput}
+              onChange={(e) => setDeclineReasonInput(e.target.value)}
+              placeholder="e.g. Schedule conflict, practice area mismatch, unable to take new dockets this week..."
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg border border-hairline bg-surface-container-lowest text-xs text-primary focus:outline-none focus:border-brass mb-4"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowDeclineModal(false)}
+                className="px-3 py-1.5 rounded-lg border border-hairline text-xs font-semibold text-on-surface-variant hover:bg-surface-container transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleBookingAction("decline_booking", { reason: declineReasonInput })}
+                disabled={isActionSubmitting}
+                className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors"
+              >
+                {isActionSubmitting ? "Declining..." : "Confirm Decline"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3: Propose Reschedule Modal */}
+      {showRescheduleModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl border border-hairline shadow-editorial max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-hairline">
+              <h3 className="text-sm font-bold text-primary font-headline">Propose Rescheduling</h3>
+              <button onClick={() => setShowRescheduleModal(false)} className="text-on-surface-variant hover:text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {actionError && (
+              <div className="mb-4 p-2.5 bg-red-500/10 border border-red-500/20 text-red-600 rounded-lg text-xs">
+                {actionError}
+              </div>
+            )}
+            <p className="text-xs text-on-surface-variant mb-3">
+              Propose a new consultation date and time. The counter-party must accept before the new slot becomes confirmed.
+            </p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-on-surface mb-1">
+                  Proposed New Date &amp; Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={rescheduleDateInput}
+                  onChange={(e) => setRescheduleDateInput(e.target.value)}
+                  min={new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16)}
+                  className="w-full px-3 py-2 rounded-lg border border-hairline bg-surface-container-lowest text-xs text-primary focus:outline-none focus:border-brass"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-on-surface mb-1">
+                  Reason for Rescheduling
+                </label>
+                <textarea
+                  value={rescheduleReasonInput}
+                  onChange={(e) => setRescheduleReasonInput(e.target.value)}
+                  placeholder="e.g. Court hearing rescheduled, urgent conflict..."
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-hairline bg-surface-container-lowest text-xs text-primary focus:outline-none focus:border-brass"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowRescheduleModal(false)}
+                className="px-3 py-1.5 rounded-lg border border-hairline text-xs font-semibold text-on-surface-variant hover:bg-surface-container transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  handleBookingAction("propose_reschedule", {
+                    proposedDate: rescheduleDateInput,
+                    reason: rescheduleReasonInput,
+                  })
+                }
+                disabled={!rescheduleDateInput || isActionSubmitting}
+                className="px-3.5 py-1.5 rounded-lg bg-brass hover:bg-brass-hover text-white text-xs font-semibold shadow-xs disabled:opacity-50 transition-colors"
+              >
+                {isActionSubmitting ? "Submitting..." : "Send Proposal"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Evidentiary Document Preview Modal (Native Bottom Sheet on Mobile) */}

@@ -407,6 +407,16 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const setMyLawyerProfile = (lawyer: Lawyer) => {
     setMyLawyerProfileState(lawyer);
     setActiveLawyerIdState(lawyer.id);
+    setSessionUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            name: lawyer.name || prev.name,
+            avatar: lawyer.avatar || prev.avatar,
+            jurisdiction: lawyer.jurisdiction || prev.jurisdiction,
+          }
+        : null
+    );
   };
 
   const setRole = (newRole: UserRole) => {

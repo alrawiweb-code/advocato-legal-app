@@ -16,6 +16,7 @@ import {
   Loader2,
   ExternalLink,
   MessageSquare,
+  IndianRupee,
 } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { createClient } from "@/lib/supabase/client";
@@ -127,6 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { label: "Admissions Queue", href: "/admin", icon: FileCheck },
     { label: "Lawyer Directory", href: "/admin/lawyers", icon: Users },
+    { label: "Fee Requests", href: "/admin/price-requests", icon: IndianRupee },
     { label: "Inquiries", href: "/admin/inquiries", icon: MessageSquare },
     { label: "Platform Matters", href: "/admin/matters", icon: FolderOpen },
     { label: "Audit Ledger", href: "/admin/audit", icon: History },

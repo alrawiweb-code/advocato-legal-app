@@ -13,9 +13,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   X,
+  IndianRupee,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { format } from "date-fns";
 
 interface LawyerRosterItem {
   id: string;
@@ -50,6 +52,12 @@ export default function AdminLawyersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Fee modal state
+  const [feeModal, setFeeModal] = useState<LawyerRosterItem | null>(null);
+  const [feeInput, setFeeInput] = useState("");
+  const [feeError, setFeeError] = useState<string | null>(null);
+  const [isSavingFee, setIsSavingFee] = useState(false);
+
   const supabase = createClient();
 
   async function loadLawyers() {
@@ -75,24 +83,27 @@ export default function AdminLawyersPage() {
         return;
       }
 
-      // Step 2: Fetch matching profiles
+      // Step 2: Fetch matching profiles (including role for strict role-filtering)
       const ids = lpData.map((lp: any) => lp.id);
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, avatar_url")
+        .select("id, full_name, email, avatar_url, role")
         .in("id", ids);
 
       if (profileError) {
         console.error("Error loading profiles:", profileError);
       }
 
-      // Step 3: Merge
+      // Step 3: Merge and filter to genuine lawyers only
       const profileMap: Record<string, any> = {};
       (profileData || []).forEach((p: any) => {
         profileMap[p.id] = p;
       });
 
-      const mapped: LawyerRosterItem[] = lpData.map((d: any) => {
+      // Strictly filter to genuine lawyers (profiles.role === 'lawyer')
+      const genuineLawyers = lpData.filter((d: any) => profileMap[d.id]?.role === "lawyer");
+
+      const mapped: LawyerRosterItem[] = genuineLawyers.map((d: any) => {
         const profile = profileMap[d.id] || {};
         return {
           id: d.id,
@@ -121,6 +132,7 @@ export default function AdminLawyersPage() {
 
   useEffect(() => {
     loadLawyers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = lawyers.filter((l) => {
@@ -196,6 +208,42 @@ export default function AdminLawyersPage() {
     }
   };
 
+  const handleSaveFee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feeModal) return;
+
+    const fee = Number(feeInput);
+    if (!fee || fee <= 0) {
+      setFeeError("Please enter a valid fee greater than 0.");
+      return;
+    }
+
+    setIsSavingFee(true);
+    setFeeError(null);
+
+    try {
+      const res = await fetch(`/api/admin/lawyers/${feeModal.id}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hourly_rate: fee }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setFeeError(data.error || "Failed to save fee. Please try again.");
+        return;
+      }
+
+      setFeeModal(null);
+      await loadLawyers();
+    } catch (e: any) {
+      setFeeError(e.message || "Unexpected error occurred.");
+    } finally {
+      setIsSavingFee(false);
+    }
+  };
+
   const getStatusBadge = (lawyer: LawyerRosterItem) => {
     switch (lawyer.verification_status) {
       case "VERIFIED":
@@ -217,6 +265,13 @@ export default function AdminLawyersPage() {
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border bg-rose-50 text-rose-800 border-rose-200">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
             Rejected
+          </span>
+        );
+      case "DOCUMENTS_REQUIRED":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border bg-sky-50 text-sky-800 border-sky-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-600" />
+            Awaiting Resubmission
           </span>
         );
       default:
@@ -300,27 +355,24 @@ export default function AdminLawyersPage() {
           </div>
         </div>
 
-        {/* Lawyers Table */}
-        <div className="bg-surface-container-lowest rounded-2xl border border-hairline shadow-xs overflow-hidden">
+        {/* Table */}
+        <div className="bg-surface-container-lowest rounded-xl border border-hairline overflow-hidden shadow-2xs">
           {isLoading ? (
-            <div className="py-20 text-center flex flex-col items-center justify-center">
-              <RefreshCw className="w-8 h-8 text-brass animate-spin mb-3" />
-              <p className="text-xs text-on-surface-variant">Loading attorney roster...</p>
+            <div className="flex items-center justify-center py-16 text-on-surface-variant text-sm">
+              <RefreshCw className="w-4 h-4 animate-spin mr-2 text-brass" />
+              Loading attorney roster...
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-16 text-center max-w-md mx-auto p-4">
-              <Users className="w-12 h-12 text-on-surface-variant mx-auto mb-3 opacity-40" />
-              <h3 className="font-headline text-base font-bold text-primary mb-1">No Attorneys Found</h3>
-              <p className="text-xs text-on-surface-variant">
-                No lawyers matched your search query or status filter.
-              </p>
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <Users className="w-8 h-8 text-on-surface-variant/40" />
+              <p className="text-sm text-on-surface-variant">No attorneys found matching your filters.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-hairline bg-surface-container-low/40 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-                    <th className="py-3.5 px-4 sm:px-6">Attorney Name & Email</th>
+                    <th className="py-3.5 px-4 sm:px-6">Attorney Name &amp; Email</th>
                     <th className="py-3.5 px-4">State Bar</th>
                     <th className="py-3.5 px-4">Bar No.</th>
                     <th className="py-3.5 px-4">Rate</th>
@@ -370,6 +422,23 @@ export default function AdminLawyersPage() {
 
                       <td className="py-4 px-4 sm:px-6 text-right">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
+                          {/* ASSIGN / EDIT FEE BUTTON */}
+                          <button
+                            onClick={() => {
+                              setFeeModal(lawyer);
+                              setFeeInput(lawyer.hourly_rate ? String(lawyer.hourly_rate) : "");
+                              setFeeError(null);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors shadow-2xs ${
+                              lawyer.hourly_rate
+                                ? "border-hairline text-primary hover:bg-surface-container-low"
+                                : "border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100"
+                            }`}
+                          >
+                            <IndianRupee className="w-3 h-3 text-brass" />
+                            <span>{lawyer.hourly_rate ? "Edit Fee" : "Assign Fee"}</span>
+                          </button>
+
                           {/* SUSPEND BUTTON — Only for VERIFIED lawyers */}
                           {lawyer.verification_status === "VERIFIED" && (
                             <button
@@ -381,15 +450,24 @@ export default function AdminLawyersPage() {
                             </button>
                           )}
 
-                          {/* REACTIVATE BUTTON — Only for SUSPENDED lawyers */}
+                          {/* REACTIVATE & REVIEW BUTTONS — For SUSPENDED lawyers */}
                           {lawyer.verification_status === "SUSPENDED" && (
-                            <button
-                              onClick={() => openReactivate(lawyer)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
-                            >
-                              <ShieldCheck className="w-3 h-3" />
-                              Reactivate
-                            </button>
+                            <>
+                              <Link
+                                href="/admin"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition-colors shadow-2xs"
+                              >
+                                <FileText className="w-3 h-3 text-brass" />
+                                Review Dossier
+                              </Link>
+                              <button
+                                onClick={() => openReactivate(lawyer)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                              >
+                                <ShieldCheck className="w-3 h-3" />
+                                Reactivate
+                              </button>
+                            </>
                           )}
 
                           {/* UNVERIFIED — direct to admissions queue */}
@@ -581,6 +659,109 @@ export default function AdminLawyersPage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* Assign / Edit Consultation Fee Modal                         */}
+      {/* ============================================================ */}
+      {feeModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface border border-hairline rounded-2xl max-w-md w-full shadow-editorial overflow-hidden animate-in fade-in-0 zoom-in-95">
+            <div className="px-6 py-4 border-b border-hairline flex items-center justify-between bg-surface-container-lowest">
+              <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                <IndianRupee className="w-4 h-4 text-brass" />
+                <span>
+                  {feeModal.hourly_rate ? "Edit Consultation Fee" : "Assign Consultation Fee"}
+                </span>
+              </div>
+              <button
+                onClick={() => setFeeModal(null)}
+                className="text-on-surface-variant hover:text-primary p-1 rounded-lg hover:bg-surface-container-low transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFee} className="p-6 space-y-4">
+              <div className="p-3 bg-surface-container-low rounded-xl border border-hairline space-y-1.5 text-xs">
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>Attorney:</span>
+                  <span className="font-bold text-primary">{feeModal.name}</span>
+                </div>
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>Bar Council #:</span>
+                  <span className="font-mono text-primary">{feeModal.bar_number}</span>
+                </div>
+                <div className="flex justify-between text-on-surface-variant">
+                  <span>Current Fee:</span>
+                  <span className="font-semibold text-primary">
+                    {feeModal.hourly_rate
+                      ? `₹${feeModal.hourly_rate.toLocaleString("en-IN")}/hr`
+                      : "Pending Admin Assignment"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-primary mb-1">
+                  Official Consultation Fee (₹ / hr) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm font-semibold">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    placeholder="e.g. 2500"
+                    value={feeInput}
+                    onChange={(e) => setFeeInput(e.target.value)}
+                    className="w-full pl-8 pr-12 py-2.5 bg-surface-container-lowest border border-hairline rounded-lg text-sm text-primary font-semibold focus:border-brass focus:ring-1 focus:ring-brass outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-xs">
+                    / hr
+                  </span>
+                </div>
+                <p className="text-[11px] text-on-surface-variant mt-1.5 leading-relaxed">
+                  The consultation fee is controlled exclusively by the administrator. The attorney will become eligible for marketplace listings and client bookings once verified with a positive rate.
+                </p>
+              </div>
+
+              {feeError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{feeError}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-hairline">
+                <button
+                  type="button"
+                  onClick={() => setFeeModal(null)}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingFee || !feeInput || Number(feeInput) <= 0}
+                  className="px-5 py-2.5 rounded-lg bg-brass hover:bg-brass-hover disabled:opacity-50 text-white font-semibold text-xs shadow-sm transition-all flex items-center gap-2"
+                >
+                  {isSavingFee ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Fee...</span>
+                    </>
+                  ) : (
+                    <span>Save Official Rate</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

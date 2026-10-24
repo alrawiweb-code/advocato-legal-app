@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-const VALID_ACTIONS = new Set(["client-signup", "lawyer-signup"]);
+const VALID_ACTIONS = new Set(["client-signup", "lawyer-signup", "forgot-password"]);
 
 /**
  * POST /api/verify-captcha

@@ -29,7 +29,43 @@ export default function AdminAdmissionsQueue() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, app?: any) => {
+    // 1. Rejected always displays as Rejected (never overridden by old suspension data)
+    if (status === "REJECTED" || app?.lawyer_profile?.verification_status === "REJECTED") {
+      return (
+        <span className="px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-semibold">
+          Rejected
+        </span>
+      );
+    }
+
+    // 2. Reopened and awaiting resubmission
+    if (status === "DOCUMENTS_REQUIRED" || app?.lawyer_profile?.verification_status === "DOCUMENTS_REQUIRED") {
+      return (
+        <span className="px-2 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded text-xs font-semibold inline-flex items-center gap-1">
+          <Clock className="w-3 h-3 text-sky-600" />
+          Awaiting Resubmission
+        </span>
+      );
+    }
+
+    const isSuspended =
+      status === "SUSPENDED" ||
+      app?.lawyer_profile?.verification_status === "SUSPENDED";
+
+    if (isSuspended && (status === "UNDER_REVIEW" || status === "PENDING" || status === "SUBMITTED")) {
+      return (
+        <span className="px-2 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded text-xs font-semibold inline-flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+          Pending Re-Verification
+        </span>
+      );
+    }
+
+    if (isSuspended && status !== "APPROVED") {
+      return <span className="px-2 py-1 bg-orange-50 text-orange-800 border border-orange-300 rounded text-xs font-semibold">Suspended</span>;
+    }
+
     switch (status) {
       case "SUBMITTED":
       case "PENDING":
@@ -43,7 +79,12 @@ export default function AdminAdmissionsQueue() {
       case "REJECTED":
         return <span className="px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-semibold">Rejected</span>;
       case "DOCUMENTS_REQUIRED":
-        return <span className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-semibold">Needs Info</span>;
+        return (
+          <span className="px-2 py-1 bg-sky-50 text-sky-700 border border-sky-200 rounded text-xs font-semibold inline-flex items-center gap-1">
+            <Clock className="w-3 h-3 text-sky-600" />
+            Awaiting Resubmission
+          </span>
+        );
       default:
         return <span className="px-2 py-1 bg-gray-50 text-gray-700 border border-gray-200 rounded text-xs font-semibold">{status}</span>;
     }
@@ -79,6 +120,9 @@ export default function AdminAdmissionsQueue() {
             >
               <option value="ALL">All Applications</option>
               <option value="PENDING">Pending Review</option>
+              <option value="DOCUMENTS_REQUIRED">Awaiting Resubmission</option>
+              <option value="REVERIFICATION">Pending Re-Verification</option>
+              <option value="SUSPENDED">Suspended</option>
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
             </select>
@@ -135,7 +179,7 @@ export default function AdminAdmissionsQueue() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {getStatusBadge(app.status)}
+                      {getStatusBadge(app.status, app)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Link

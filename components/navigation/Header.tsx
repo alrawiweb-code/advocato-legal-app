@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Search, User, ShieldCheck, Scale, X, LogOut, Lock } from "lucide-react";
+import { Search, User, ShieldCheck, Scale, X, LogOut, Lock, IndianRupee } from "lucide-react";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { getStoredConsultations } from "@/lib/data/consultations";
 import { formatPersonaName } from "@/lib/utils/formatters";
+
+import { createClient } from "@/lib/supabase/client";
 
 export function Header() {
   const pathname = usePathname();
@@ -18,11 +20,60 @@ export function Header() {
   const [hasIntake, setHasIntake] = useState(false);
 
   useEffect(() => {
-    // For production, this should fetch actual unread counts and intake status from Supabase
-    // instead of relying on localStorage overrides.
-    setHasIntake(false);
-    setUnreadCount(0);
-  }, [role, pathname]);
+    let isMounted = true;
+    const supabase = createClient();
+
+    const fetchUnread = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !isMounted) {
+        setUnreadCount(0);
+        return;
+      }
+
+      try {
+        if (role === "lawyer") {
+          // Count pending consultation requests awaiting lawyer approval
+          const { count: pendingMattersCount } = await supabase
+            .from("matters")
+            .select("id", { count: "exact", head: true })
+            .eq("lawyer_id", user.id)
+            .eq("status", "pending");
+
+          // Count unread notifications
+          const { count: notifCount } = await supabase
+            .from("lawyer_notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("lawyer_id", user.id)
+            .eq("is_read", false);
+
+          if (isMounted) {
+            setUnreadCount((pendingMattersCount || 0) + (notifCount || 0));
+          }
+        } else if (role === "client") {
+          // Count pending reschedule proposals awaiting client decision
+          const { count: pendingRescheduleCount } = await supabase
+            .from("matters")
+            .select("id", { count: "exact", head: true })
+            .eq("client_id", user.id)
+            .eq("reschedule_status", "pending_client");
+
+          if (isMounted) {
+            setUnreadCount(pendingRescheduleCount || 0);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch unread count:", err);
+      }
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 20000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [role, pathname, isAuthenticated]);
 
   const handleSignOut = async () => {
     await logout();
@@ -100,6 +151,17 @@ export function Header() {
                   }`}
                 >
                   Lawyers
+                </Link>
+                <Link
+                  href="/admin/price-requests"
+                  className={`text-xs font-semibold tracking-wider uppercase px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                    pathname.startsWith("/admin/price-requests")
+                      ? "bg-surface-container-low text-primary font-bold shadow-2xs"
+                      : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low/60"
+                  }`}
+                >
+                  <IndianRupee className="w-3.5 h-3.5 text-brass" />
+                  <span>Fee Requests</span>
                 </Link>
                 <Link
                   href="/admin/inquiries"

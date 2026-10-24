@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Scale,
@@ -47,6 +48,12 @@ function LoginFormContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("reset") === "success") {
+      setSuccessMessage("Your password has been reset successfully. Please sign in with your new credentials.");
+    }
+  }, [searchParams]);
 
   // CAPTCHA tokens
   const [captchaTokenClient, setCaptchaTokenClient] = useState<string | null>(null);
@@ -299,9 +306,17 @@ function LoginFormContent() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-primary block">
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-primary block">
+                    Password
+                  </label>
+                  <Link
+                    href={`/auth/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
+                    className="text-xs text-brass hover:text-brass-hover hover:underline font-medium transition-colors"
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
                 <PasswordInput
                   value={password}
                   onChange={setPassword}

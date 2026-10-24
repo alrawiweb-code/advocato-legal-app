@@ -89,11 +89,15 @@ export async function getOrCreateInquiry(
 
   try {
     // Find the most recent audit log event for this lawyer + type
-    const action = inquiryType === "SUSPENSION" ? "LAWYER_SUSPENDED" : "REJECTED";
+    const actionQuery =
+      inquiryType === "SUSPENSION"
+        ? "action.eq.LAWYER_SUSPENDED"
+        : "action.eq.REJECT_APPLICATION,action.eq.REJECTED";
+
     const { data: auditLog } = await admin
       .from("verification_audit_logs")
       .select("id, reason, created_at, actor_id, application_id")
-      .or(`action.eq.${action}`)
+      .or(actionQuery)
       .order("created_at", { ascending: false })
       .limit(20);
 
@@ -142,12 +146,24 @@ export async function getOrCreateInquiry(
       return { inquiry: existing[0] as SuspensionInquiry };
     }
 
-    // Fetch lawyer's current profile for snapshot
-    const { data: lp } = await admin
-      .from("lawyer_profiles")
-      .select("suspension_reason, suspended_at")
-      .eq("id", lawyerId)
-      .single();
+    // Fetch lawyer's current profile and latest application for snapshot
+    const [lpRes, appRes] = await Promise.all([
+      admin
+        .from("lawyer_profiles")
+        .select("suspension_reason, suspended_at")
+        .eq("id", lawyerId)
+        .maybeSingle(),
+      admin
+        .from("lawyer_verification_applications")
+        .select("rejection_reason, reviewed_at, reviewed_by")
+        .eq("lawyer_id", lawyerId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const lp = lpRes.data;
+    const latestApp = appRes.data;
 
     // Create new inquiry
     const { data: created, error: createErr } = await admin
@@ -158,9 +174,17 @@ export async function getOrCreateInquiry(
         inquiry_type: inquiryType,
         status: "OPEN",
         suspension_reason_snapshot:
-          lp?.suspension_reason || matchingAuditLog?.reason || null,
-        suspended_at_snapshot: lp?.suspended_at || matchingAuditLog?.created_at || null,
-        suspended_by_snapshot: matchingAuditLog?.actor_id || null,
+          inquiryType === "REJECTION"
+            ? (latestApp?.rejection_reason || matchingAuditLog?.reason || "Application rejected by Admissions Panel.")
+            : (lp?.suspension_reason || matchingAuditLog?.reason || null),
+        suspended_at_snapshot:
+          inquiryType === "REJECTION"
+            ? (latestApp?.reviewed_at || matchingAuditLog?.created_at || null)
+            : (lp?.suspended_at || matchingAuditLog?.created_at || null),
+        suspended_by_snapshot:
+          inquiryType === "REJECTION"
+            ? (latestApp?.reviewed_by || matchingAuditLog?.actor_id || null)
+            : (matchingAuditLog?.actor_id || null),
       })
       .select()
       .single();

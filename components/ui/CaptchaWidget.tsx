@@ -8,7 +8,7 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!;
 
 interface CaptchaWidgetProps {
   /** Matches data-action on the widget; must align with server-side siteverify check. */
-  action: "client-signup" | "lawyer-signup";
+  action: "client-signup" | "lawyer-signup" | "forgot-password";
   onVerify: (token: string) => void;
   onExpire?: () => void;
 }

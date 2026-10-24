@@ -15,24 +15,49 @@ import {
   MessageSquare,
   UserCheck,
   RefreshCw,
+  Edit3,
+  ShieldAlert,
+  Upload,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { formatAdvocateName } from "@/lib/utils/formatters";
 import { getStoredConsultations } from "@/lib/data/consultations";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import { Lawyer, Consultation } from "@/types";
 import { getUserMatters } from "@/lib/supabase/matters";
+import { getLawyerApplication } from "@/lib/supabase/verification";
 import { VerificationModal } from "@/components/lawyer/VerificationModal";
 import { SuspensionInquiryPanel } from "@/components/lawyer/SuspensionInquiryPanel";
+import { EditProfileModal } from "@/components/lawyer/EditProfileModal";
+import { PriceRequestModal } from "@/components/lawyer/PriceRequestModal";
 import { DynamicHeadline } from "@/components/home/DynamicHeadline";
 
 function LawyerDashboardView() {
-  const { activeLawyer, currentUser } = useUserRole();
+  const { activeLawyer, currentUser, setMyLawyerProfile } = useUserRole();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showPriceRequestModal, setShowPriceRequestModal] = useState(false);
+  const [appDetails, setAppDetails] = useState<any>(null);
 
   const isVerified = Boolean(activeLawyer?.isVerified ?? currentUser.isVerified);
   const verificationStatus = activeLawyer?.verificationStatus || currentUser.verificationStatus || "NOT_VERIFIED";
+
+  useEffect(() => {
+    async function loadApp() {
+      if (currentUser?.id) {
+        try {
+          const app = await getLawyerApplication(currentUser.id);
+          setAppDetails(app);
+        } catch (e) {
+          console.error("Error loading application details:", e);
+        }
+      }
+    }
+    loadApp();
+  }, [currentUser?.id, showVerificationModal]);
 
   useEffect(() => {
     async function loadStats() {
@@ -83,9 +108,13 @@ function LawyerDashboardView() {
                 <span className="inline-flex items-center gap-1.5 text-amber-800 font-semibold bg-amber-50 px-2.5 py-0.5 rounded-full text-[11px] border border-amber-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" /> Verification Pending Approval
                 </span>
+              ) : verificationStatus === "DOCUMENTS_REQUIRED" ? (
+                <span className="inline-flex items-center gap-1.5 text-sky-800 font-semibold bg-sky-50 px-2.5 py-0.5 rounded-full text-[11px] border border-sky-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600 animate-pulse" /> Reopened — Awaiting Resubmission
+                </span>
               ) : verificationStatus === "REJECTED" ? (
                 <span className="inline-flex items-center gap-1.5 text-rose-800 font-semibold bg-rose-50 px-2.5 py-0.5 rounded-full text-[11px] border border-rose-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600" /> Verification Needs Attention
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600" /> Verification Rejected
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 text-amber-800 font-semibold bg-amber-50 px-2.5 py-0.5 rounded-full text-[11px] border border-amber-200">
@@ -100,11 +129,37 @@ function LawyerDashboardView() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Always allow lawyers to edit their profile */}
+            {activeLawyer && (
+              <button
+                type="button"
+                onClick={() => setShowEditProfileModal(true)}
+                className="bg-surface-container-low hover:bg-surface-container border border-hairline text-primary text-xs font-semibold px-4 py-2.5 rounded-lg btn-editorial-secondary flex items-center gap-2 min-h-[42px] transition-colors"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-brass" />
+                <span>Edit Profile</span>
+              </button>
+            )}
+
+            {activeLawyer && (
+              <Link
+                href={`/lawyers/${activeLawyer.id}`}
+                className="border border-hairline hover:bg-surface-container text-primary text-xs font-semibold px-4 py-2.5 rounded-lg btn-editorial-secondary flex items-center gap-2 min-h-[42px] transition-colors"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-brass" />
+                <span>{isVerified ? "View Public Profile" : "Preview Profile"}</span>
+              </Link>
+            )}
+
             {verificationStatus === "SUSPENDED" ? (
-              <span className="inline-flex items-center gap-2 bg-orange-100 text-orange-800 text-xs font-semibold px-5 py-2.5 rounded-lg border border-orange-200">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Marketplace Access Suspended</span>
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowVerificationModal(true)}
+                className="inline-flex items-center gap-2 bg-orange-100 hover:bg-orange-200 text-orange-800 text-xs font-semibold px-4 py-2.5 rounded-lg border border-orange-200 transition-colors"
+              >
+                <ShieldAlert className="w-4 h-4 text-orange-700" />
+                <span>Replace Documents</span>
+              </button>
             ) : !isVerified ? (
               <button
                 onClick={() => setShowVerificationModal(true)}
@@ -112,23 +167,20 @@ function LawyerDashboardView() {
               >
                 <Lock className="w-4 h-4" />
                 <span>
-                  {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED"
+                  {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
                     ? "View Verification Status"
+                    : verificationStatus === "DOCUMENTS_REQUIRED"
+                    ? "Resubmit Credentials"
+                    : verificationStatus === "REJECTED"
+                    ? "View Rejection Details"
                     : "Apply for Verification"}
                 </span>
               </button>
-            ) : (
-              <Link
-                href={activeLawyer ? `/lawyers/${activeLawyer.id}` : "/cases"}
-                className="bg-brass hover:bg-brass-hover text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md btn-editorial-brass flex items-center gap-2 min-h-[42px]"
-              >
-                <UserCheck className="w-4 h-4" />
-                <span>{activeLawyer ? "View Public Profile" : "Active Matters"}</span>
-              </Link>
-            )}
+            ) : null}
+
             <Link
               href="/cases"
-              className="border border-hairline hover:bg-surface-container text-primary text-xs font-semibold px-5 py-2.5 rounded-lg btn-editorial-secondary flex items-center gap-2 min-h-[42px]"
+              className="border border-hairline hover:bg-surface-container text-primary text-xs font-semibold px-4 py-2.5 rounded-lg btn-editorial-secondary flex items-center gap-2 min-h-[42px]"
             >
               <FolderOpen className="w-3.5 h-3.5 text-brass" />
               <span>{isVerified ? "Manage Cases" : "Cases (Locked)"}</span>
@@ -141,7 +193,7 @@ function LawyerDashboardView() {
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center text-orange-700 shrink-0 mt-0.5">
-                <ShieldCheck className="w-5 h-5" />
+                <ShieldAlert className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -155,51 +207,92 @@ function LawyerDashboardView() {
                 <p className="text-xs text-on-surface-variant mt-1 max-w-2xl leading-relaxed">
                   Your Advocato marketplace access has been temporarily suspended by the administration team.
                   You cannot currently receive new marketplace inquiries or appear in lawyer search results.
-                  Please contact the Advocato Admissions Desk for further information.
+                  Please replace or correct your verification documents to request administrative re-verification.
                 </p>
                 {(activeLawyer as any)?.suspensionReason && (
                   <div className="mt-2 p-2.5 bg-orange-50 border border-orange-200 rounded-lg">
-                    <p className="text-xs font-semibold text-orange-800">Admin Notice:</p>
+                    <p className="text-xs font-semibold text-orange-800">Admin Notice &amp; Reason:</p>
                     <p className="text-xs text-orange-700 mt-0.5">{(activeLawyer as any).suspensionReason}</p>
                   </div>
                 )}
               </div>
             </div>
+            <button
+              onClick={() => setShowVerificationModal(true)}
+              className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-xs hover:shadow-md flex items-center gap-2 self-start sm:self-auto shrink-0 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Replace &amp; Re-Verify Documents</span>
+            </button>
           </div>
         )}
 
         {/* Lawyer Suspension/Rejection Inquiry Panel */}
-        <SuspensionInquiryPanel
-          verificationStatus={verificationStatus}
-          suspensionReason={(activeLawyer as any)?.suspensionReason}
-          suspendedAt={(activeLawyer as any)?.suspendedAt}
-        />
+        <div id="inquiry">
+          <SuspensionInquiryPanel
+            verificationStatus={verificationStatus}
+            suspensionReason={(activeLawyer as any)?.suspensionReason || appDetails?.rejection_reason || appDetails?.requested_changes}
+            suspendedAt={(activeLawyer as any)?.suspendedAt || appDetails?.reviewed_at}
+          />
+        </div>
 
         {/* Admissions Verification Notification Banner */}
         {!isVerified && verificationStatus !== "SUSPENDED" && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className={`${
+            verificationStatus === "DOCUMENTS_REQUIRED"
+              ? "bg-sky-500/10 border-sky-500/30"
+              : verificationStatus === "REJECTED"
+              ? "bg-rose-500/10 border-rose-500/30"
+              : "bg-amber-500/10 border-amber-500/30"
+          } border rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
             <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
-                <Lock className="w-5 h-5" />
+              <div className={`w-10 h-10 rounded-xl ${
+                verificationStatus === "DOCUMENTS_REQUIRED"
+                  ? "bg-sky-500/20 text-sky-700"
+                  : verificationStatus === "REJECTED"
+                  ? "bg-rose-500/20 text-rose-700"
+                  : "bg-amber-500/20 text-amber-700"
+              } flex items-center justify-center shrink-0 mt-0.5`}>
+                {verificationStatus === "DOCUMENTS_REQUIRED" ? (
+                  <Clock className="w-5 h-5" />
+                ) : verificationStatus === "REJECTED" ? (
+                  <AlertTriangle className="w-5 h-5" />
+                ) : (
+                  <Lock className="w-5 h-5" />
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-headline font-semibold text-primary text-sm sm:text-base">
                     {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
                       ? "Bar Verification Application Under Review"
+                      : verificationStatus === "DOCUMENTS_REQUIRED"
+                      ? "Application Reopened for Resubmission"
                       : verificationStatus === "REJECTED"
-                      ? "Verification Revision Required"
+                      ? "Application Verification Rejected"
                       : "Action Required: Apply for Bar Verification & Onboarding"}
                   </h3>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 border border-amber-500/30">
+                  <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                    verificationStatus === "DOCUMENTS_REQUIRED"
+                      ? "bg-sky-500/20 text-sky-800 border-sky-500/30"
+                      : verificationStatus === "REJECTED"
+                      ? "bg-rose-500/20 text-rose-800 border-rose-500/30"
+                      : "bg-amber-500/20 text-amber-800 border-amber-500/30"
+                  } border`}>
                     {verificationStatus}
                   </span>
                 </div>
                 <p className="text-xs text-on-surface-variant mt-1 max-w-2xl leading-relaxed">
                   {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
                     ? "Your bar enrollment certificate and identity credentials have been submitted to the Admissions Desk. Client case dockets and inquiries will unlock upon review."
+                    : verificationStatus === "DOCUMENTS_REQUIRED"
+                    ? appDetails?.requested_changes
+                      ? `Administrator Reopening Guidance: "${appDetails.requested_changes}". Please upload updated credentials and resubmit for review.`
+                      : "An administrator has reopened your application and requested revisions. Please review the feedback and submit updated documents."
                     : verificationStatus === "REJECTED"
-                    ? "Your verification dossier requires updated documents or clarification. Please review admissions feedback and resubmit."
+                    ? appDetails?.rejection_reason
+                      ? `Rejection Reason: "${appDetails.rejection_reason}". This application is locked. Only an administrator can reopen it. You may submit an inquiry below.`
+                      : "Your verification application has been rejected and is currently locked. Only an administrator can reopen it. You may submit an inquiry to ask why."
                     : "To comply with Bar Council regulations and access confidential client case records, you must verify your enrollment credentials with Advocato."}
                 </p>
               </div>
@@ -212,8 +305,10 @@ function LawyerDashboardView() {
               <span>
                 {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED" || verificationStatus === "UNDER_REVIEW"
                   ? "View Application Status"
+                  : verificationStatus === "DOCUMENTS_REQUIRED"
+                  ? "Update Documents & Resubmit"
                   : verificationStatus === "REJECTED"
-                  ? "Resubmit Credentials"
+                  ? "View Rejection Details & Inquire"
                   : "Apply for Verification"}
               </span>
             </button>
@@ -247,19 +342,29 @@ function LawyerDashboardView() {
             <p className="text-[11px] text-on-surface-variant mt-1">Client messages requiring attention</p>
           </div>
 
-          <div className="bg-surface-container-lowest p-5 rounded-xl border border-hairline shadow-xs">
-            <div className="flex items-center justify-between text-on-surface-variant mb-2">
-              <span className="text-xs font-semibold uppercase tracking-wider">Consultation Rate</span>
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          <div className="bg-surface-container-lowest p-5 rounded-xl border border-hairline shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-on-surface-variant mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Consultation Rate</span>
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="font-headline text-2xl sm:text-3xl font-bold text-primary">
+                {activeLawyer?.hourlyRate ? (
+                  <>₹{activeLawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-xs font-normal text-on-surface-variant">/ hr</span></>
+                ) : (
+                  <span className="text-sm text-amber-600 font-semibold tracking-tight">Pending Admin Assignment</span>
+                )}
+              </div>
+              <p className="text-[11px] text-on-surface-variant mt-1">Your published consultation rate</p>
             </div>
-            <div className="font-headline text-2xl sm:text-3xl font-bold text-primary">
-              {activeLawyer?.hourlyRate ? (
-                <>₹{activeLawyer.hourlyRate.toLocaleString("en-IN")} <span className="text-xs font-normal text-on-surface-variant">/ hr</span></>
-              ) : (
-                <span className="text-sm text-amber-600 font-semibold tracking-tight">Pending Admin Assignment</span>
-              )}
-            </div>
-            <p className="text-[11px] text-on-surface-variant mt-1">Your published consultation rate</p>
+            <button
+              type="button"
+              onClick={() => setShowPriceRequestModal(true)}
+              className="mt-3 text-xs font-semibold text-brass hover:text-brass-hover hover:underline flex items-center gap-1 self-start"
+            >
+              <span>Request Fee Increase</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
         </div>
 
@@ -388,6 +493,25 @@ function LawyerDashboardView() {
         isOpen={showVerificationModal}
         onClose={() => setShowVerificationModal(false)}
       />
+
+      {showEditProfileModal && activeLawyer && (
+        <EditProfileModal
+          isOpen={showEditProfileModal}
+          onClose={() => setShowEditProfileModal(false)}
+          lawyer={activeLawyer}
+          onProfileUpdated={(updated) => {
+            setMyLawyerProfile(updated);
+          }}
+        />
+      )}
+
+      {showPriceRequestModal && (
+        <PriceRequestModal
+          isOpen={showPriceRequestModal}
+          onClose={() => setShowPriceRequestModal(false)}
+          currentRate={activeLawyer?.hourlyRate || null}
+        />
+      )}
     </div>
   );
 }

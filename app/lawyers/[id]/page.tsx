@@ -21,16 +21,18 @@ import {
   Briefcase,
   Sparkles,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle,
+  ShieldAlert
 } from "lucide-react";
 
-import { getOrCreateConsultationForLawyer } from "@/lib/data/consultations";
 import { createOrGetMatter } from "@/lib/supabase/matters";
 import { Lawyer, IntakeAssessment, LawyerReview } from "@/types";
 import { useUserRole, getInitialsAvatar } from "@/lib/context/RoleContext";
 import StarRating from "@/components/marketplace/StarRating";
 import ReviewsList from "@/components/marketplace/ReviewsList";
 import { PriceRequestModal } from "@/components/lawyer/PriceRequestModal";
+import { EditProfileModal } from "@/components/lawyer/EditProfileModal";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -56,28 +58,13 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [consultationType, setConsultationType] = useState<"video" | "phone">("video");
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
+  const [bookingSuccessNotice, setBookingSuccessNotice] = useState<string | null>(null);
 
   // Edit Profile Modal State (for lawyers)
   const [showEditModal, setShowEditModal] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [showPriceRequestModal, setShowPriceRequestModal] = useState(false);
-  const [editForm, setEditForm] = useState<{
-    name: string;
-    title: string;
-    hourlyRate: number | null;
-    jurisdiction: string;
-    bio: string;
-    headline: string;
-  }>({
-    name: "",
-    title: "",
-    hourlyRate: null,
-    jurisdiction: "",
-    bio: "",
-    headline: "",
-  });
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchLawyer = async () => {
@@ -85,19 +72,10 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
       try {
         const res = await fetch(`/api/lawyers/${resolvedParams.id}`);
         if (res.ok) {
-          // Case C: Verified lawyer — show full public profile
+          // Profile data returned (or private preview for own unverified profile)
           const data = await res.json();
           setLawyer(data);
           setProfileStatus("found");
-          setEditForm({
-            name: data.name,
-            title: data.title,
-            hourlyRate: data.hourlyRate,
-            jurisdiction: data.jurisdiction,
-            bio: data.bio,
-            headline: data.headline || "",
-          });
-          setAvatarPreview(data.avatar);
         } else if (res.status === 401) {
           // Unauthenticated — redirect to login
           router.push(`/login?redirect=/lawyers/${resolvedParams.id}`);
@@ -150,7 +128,11 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
     }
   }, [resolvedParams.id, router]);
 
-  const isOwnProfile = role === "lawyer" && (activeLawyer?.id === lawyer?.id || !activeLawyer);
+  const isOwnProfile = Boolean(
+    activeLawyer?.id === lawyer?.id ||
+    currentUser?.id === lawyer?.id ||
+    (lawyer as any)?.isOwnProfile
+  );
 
   const handleShare = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -173,90 +155,50 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
   const confirmBooking = async () => {
     if (!lawyer || !lawyer.hourlyRate || lawyer.hourlyRate <= 0) return;
+    if (!selectedDate) {
+      setBookingError("Please select a date and time for the consultation.");
+      return;
+    }
+
+    setIsBookingSubmitting(true);
+    setBookingError(null);
 
     try {
+      // Convert browser datetime-local to canonical ISO 8601 string with timezone
+      const appointmentDateIso = new Date(selectedDate).toISOString();
+
       const { matter, error } = await createOrGetMatter({
         lawyerId: lawyer.id,
         caseTitle: intakeData?.caseTitle || `Consultation with ${lawyer.name}`,
         category: intakeData?.category || lawyer.practiceAreas?.[0] || "General Legal Counsel",
         jurisdiction: intakeData?.jurisdiction || lawyer.jurisdiction || "Delhi (DL)",
         urgency: intakeData?.urgency || "Medium",
-        appointmentDate: selectedDate,
+        appointmentDate: appointmentDateIso,
+        consultationType: consultationType,
       });
 
-      if (matter) {
-        setShowBookingModal(false);
-        router.push(`/messages?matterId=${matter.id}`);
+      if (error || !matter) {
+        setBookingError(error || "Failed to submit consultation request. Please try again.");
+        setIsBookingSubmitting(false);
         return;
       }
-    } catch (e) {
-      console.warn("Matter creation error, using consultation fallback:", e);
-    }
 
-    const consultation = getOrCreateConsultationForLawyer({
-      lawyerId: lawyer.id,
-      clientName: currentUser.name,
-      caseTitle: intakeData?.caseTitle,
-      intakeBrief: intakeData?.rawText || intakeData?.summary,
-      opposingParty: intakeData?.opposingParty,
-      jurisdiction: intakeData?.jurisdiction,
-      appointmentDate: selectedDate,
-      consultationType: consultationType,
-      documents: intakeData?.documents,
-    });
-    setShowBookingModal(false);
-    router.push(`/messages?id=${consultation.id}`);
-  };
+      setBookingSuccessNotice(
+        `Consultation Request Submitted — Awaiting confirmation from Advocate ${lawyer.name}`
+      );
 
-  const handleSaveProfile = async () => {
-    if (!lawyer) return;
-    setIsSavingProfile(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("name", editForm.name);
-      formData.append("title", editForm.title);
-      formData.append("headline", editForm.headline);
-      if (editForm.hourlyRate !== null) {
-        formData.append("hourlyRate", editForm.hourlyRate.toString());
-      }
-      formData.append("jurisdiction", editForm.jurisdiction);
-      formData.append("bio", editForm.bio);
-      
-      if (avatarFile) {
-        formData.append("avatar", avatarFile);
-      }
-
-      const res = await fetch(`/api/lawyers/${lawyer.id}`, {
-        method: "PATCH",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to save profile");
-      }
-
-      const { avatarUrl } = await res.json();
-      
-      const updatedLawyer = {
-        ...lawyer,
-        ...editForm,
-      };
-      
-      if (avatarUrl) {
-        updatedLawyer.avatar = avatarUrl;
-      }
-
-      setLawyer(updatedLawyer);
-      setMyLawyerProfile(updatedLawyer);
-      setShowEditModal(false);
-    } catch (e) {
-      console.error(e);
-      alert("An error occurred while saving your profile.");
-    } finally {
-      setIsSavingProfile(false);
+      // Brief delay so user sees confirmation before navigation
+      setTimeout(() => {
+        setShowBookingModal(false);
+        router.push(`/messages?matterId=${matter.id}`);
+      }, 1200);
+    } catch (e: any) {
+      setBookingError(e?.message || "An unexpected error occurred while processing your booking.");
+      setIsBookingSubmitting(false);
     }
   };
+
+
 
   if (isLoading) {
     return (
@@ -412,6 +354,85 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
 
   return (
     <div className="flex-1 flex flex-col bg-background">
+      {/* Administrator Inspection Banner */}
+      {(role === "admin" || (lawyer as any)?.isAdminInspection) && lawyer && (
+        <div className="bg-slate-900 text-white px-4 py-3 text-xs sm:text-sm sticky top-16 z-20 shadow-md">
+          <div className="max-w-[1280px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 font-bold uppercase tracking-wider text-[11px] border border-amber-500/30">
+                <ShieldAlert className="w-3.5 h-3.5" /> Administrator Inspection View
+              </span>
+              <span className="text-slate-300">
+                Verification: <strong className="text-white">{lawyer.verificationStatus || (lawyer.isVerified ? "VERIFIED" : "NOT_VERIFIED")}</strong>
+              </span>
+              {(lawyer as any)?.barNumber && (
+                <span className="text-slate-300">
+                  • Bar No: <strong className="font-mono text-white">{(lawyer as any).barNumber}</strong>
+                </span>
+              )}
+              {(lawyer as any)?.suspensionReason && lawyer.verificationStatus === "SUSPENDED" && (
+                <span className="text-orange-300">
+                  • Suspension Reason: <em>{(lawyer as any).suspensionReason}</em>
+                </span>
+              )}
+              {(lawyer as any)?.rejectionReason && lawyer.verificationStatus === "REJECTED" && (
+                <span className="text-rose-300">
+                  • Rejection Reason: <em>{(lawyer as any).rejectionReason}</em>
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Queue
+              </Link>
+              {(lawyer as any)?.applicationId ? (
+                <Link
+                  href={`/admin/admissions/${(lawyer as any).applicationId}`}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition-colors shadow-xs"
+                >
+                  <FileText className="w-3.5 h-3.5" /> Open in Admissions
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-slate-800 text-slate-400 text-xs font-medium border border-slate-700">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" /> No Dossier on File
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Private Profile Preview Banner (Shown to Owner when Unverified / Pending Review) */}
+      {isOwnProfile && lawyer && (!lawyer.isVerified || lawyer.verificationStatus !== "VERIFIED") && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-3.5 text-xs sm:text-sm text-primary sticky top-16 z-20 backdrop-blur-md">
+          <div className="max-w-[1280px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <div>
+                <span className="font-bold text-amber-900">Private Profile Preview</span> — Verification Status:{" "}
+                <span className="font-bold uppercase tracking-wider text-amber-800">
+                  {lawyer.verificationStatus?.replace(/_/g, " ") || "Pending Review"}
+                </span>
+                .{" "}
+                <span className="text-on-surface-variant hidden md:inline">
+                  This profile is private to you and excluded from public listings and client bookings until approved by the Admissions Desk.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brass hover:bg-brass-hover text-white text-xs font-semibold shadow-xs shrink-0 transition-colors"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Edit Profile</span>
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Top Banner indicating match */}
       {matchInfo && (
@@ -425,9 +446,12 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
       <div className="max-w-[1280px] w-full mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-8 pb-16">
         
         {/* Back Link */}
-        <Link href="/lawyers" className="inline-flex items-center gap-1.5 text-sm font-medium text-outline-variant hover:text-primary transition-colors mb-6">
+        <Link 
+          href={role === "admin" ? "/admin" : "/lawyers"} 
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-outline-variant hover:text-primary transition-colors mb-6"
+        >
           <ArrowLeft className="w-4 h-4" />
-          Back to Directory
+          {role === "admin" ? "Back to Admissions Queue" : "Back to Directory"}
         </Link>
 
         {/* Profile Header Card */}
@@ -471,6 +495,22 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                       <button onClick={() => setShowEditModal(true)} className="flex items-center gap-2 bg-surface-container-low border border-hairline px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-surface-container transition-colors">
                         <Edit3 className="w-4 h-4" /> Edit Profile
                       </button>
+                    ) : role === "admin" ? (
+                      (lawyer as any)?.applicationId ? (
+                        <Link
+                          href={`/admin/admissions/${(lawyer as any).applicationId}`}
+                          className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-dark transition-colors shadow-sm"
+                        >
+                          <ShieldCheck className="w-4 h-4" /> Review Dossier
+                        </Link>
+                      ) : (
+                        <Link
+                          href="/admin"
+                          className="flex items-center gap-2 bg-surface-container-low border border-hairline text-on-surface-variant hover:text-primary px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-surface-container transition-colors shadow-2xs"
+                        >
+                          <Clock className="w-4 h-4 text-brass" /> Admissions Queue
+                        </Link>
+                      )
                     ) : (
                       <button onClick={handleOpenBooking} className="flex items-center gap-2 bg-brass text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-brass-hover transition-colors shadow-sm">
                         <Calendar className="w-4 h-4" /> Book Consultation
@@ -641,10 +681,29 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                 </button>
               )}
 
-              {!isOwnProfile && (
+              {!isOwnProfile && role !== "admin" && (
                 <button onClick={handleOpenBooking} className="w-full mt-6 bg-brass text-white py-3 rounded-lg text-sm font-semibold hover:bg-brass-hover transition-colors shadow-sm btn-editorial-brass">
                   Request Consultation
                 </button>
+              )}
+              {role === "admin" && (
+                (lawyer as any)?.applicationId ? (
+                  <Link
+                    href={`/admin/admissions/${(lawyer as any).applicationId}`}
+                    className="w-full mt-6 bg-primary text-white py-3 rounded-lg text-sm font-semibold hover:bg-slate-dark transition-colors shadow-sm btn-editorial flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Review Admissions Dossier
+                  </Link>
+                ) : (
+                  <Link
+                    href="/admin"
+                    className="w-full mt-6 bg-surface-container-low border border-hairline text-on-surface-variant hover:text-primary py-3 rounded-lg text-sm font-semibold hover:bg-surface-container transition-colors shadow-2xs flex items-center justify-center gap-2"
+                  >
+                    <Clock className="w-4 h-4 text-brass" />
+                    Admissions Queue (No Dossier)
+                  </Link>
+                )
               )}
             </div>
 
@@ -785,14 +844,36 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
+              {bookingError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 rounded-lg text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{bookingError}</span>
+                </div>
+              )}
+
+              {bookingSuccessNotice && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 rounded-lg text-xs flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{bookingSuccessNotice}</span>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={confirmBooking}
-                disabled={!selectedDate}
+                disabled={!selectedDate || isBookingSubmitting || !!bookingSuccessNotice}
                 className="w-full bg-brass hover:bg-brass-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-3.5 rounded-lg shadow-editorial transition-transform active:scale-95 flex items-center justify-center gap-2 min-h-[44px]"
               >
-                <span>Confirm &amp; Open Chat</span>
-                <ArrowRight className="w-4 h-4" />
+                {isBookingSubmitting ? (
+                  <span>Submitting Request...</span>
+                ) : bookingSuccessNotice ? (
+                  <span>Request Submitted!</span>
+                ) : (
+                  <>
+                    <span>Confirm &amp; Open Chat</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -800,86 +881,16 @@ export default function LawyerProfileDetailPage({ params }: PageProps) {
       )}
 
       {/* Edit Profile Modal */}
-      {showEditModal && isOwnProfile && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface rounded-xl border border-hairline shadow-editorial w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 relative animate-in fade-in zoom-in-95 duration-200">
-            <button onClick={() => setShowEditModal(false)} className="absolute top-4 right-4 text-on-surface-variant hover:text-primary">
-              <X className="w-5 h-5" />
-            </button>
-            
-            <h2 className="text-xl font-headline font-semibold text-primary mb-6">Edit Professional Profile</h2>
-            
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-surface-container-lowest border border-hairline rounded-xl mb-2">
-                <img 
-                  src={avatarPreview || lawyer.avatar || getInitialsAvatar(lawyer.name)} 
-                  alt="Profile Preview" 
-                  className="w-16 h-16 rounded-full object-cover border border-hairline"
-                />
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold text-on-surface mb-1">Profile Photo</label>
-                  <p className="text-[11px] text-on-surface-variant mb-2">Upload a professional headshot for your directory listing.</p>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setAvatarFile(file);
-                        setAvatarPreview(URL.createObjectURL(file));
-                      }
-                    }}
-                    className="block w-full text-xs text-on-surface-variant file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-surface-container-low file:text-primary hover:file:bg-surface-container transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Full Name</label>
-                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Professional Title</label>
-                  <input type="text" value={editForm.title} onChange={(e) => setEditForm({...editForm, title: e.target.value})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-xs font-semibold text-on-surface mb-1.5">Profile Tagline / Headline</label>
-                <input type="text" value={editForm.headline} onChange={(e) => setEditForm({...editForm, headline: e.target.value})} placeholder="e.g. Protecting workplace rights across Delhi" className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Official Hourly Rate</label>
-                  <div className="w-full bg-surface-container-low border border-hairline rounded-lg px-3 py-2 text-sm text-on-surface-variant font-medium flex items-center justify-between">
-                    <span>
-                      {editForm.hourlyRate ? `₹${editForm.hourlyRate.toLocaleString("en-IN")}/hr` : "Pending Assignment"}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wider text-brass font-bold">Admin Managed</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface mb-1.5">Jurisdiction / State Bar</label>
-                  <input type="text" value={editForm.jurisdiction} onChange={(e) => setEditForm({...editForm, jurisdiction: e.target.value})} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface mb-1.5">Full Biography</label>
-                <textarea value={editForm.bio} onChange={(e) => setEditForm({...editForm, bio: e.target.value})} rows={5} className="w-full bg-surface-container border border-hairline rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-brass resize-none" />
-              </div>
-            </div>
-
-            <div className="mt-8 flex justify-end gap-3">
-              <button onClick={() => setShowEditModal(false)} disabled={isSavingProfile} className="px-4 py-2 text-sm font-medium text-on-surface hover:text-primary disabled:opacity-50">Cancel</button>
-              <button onClick={handleSaveProfile} disabled={isSavingProfile} className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-slate-dark btn-editorial flex items-center gap-2">
-                {isSavingProfile ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {showEditModal && lawyer && (
+        <EditProfileModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          lawyer={lawyer}
+          onProfileUpdated={(updated) => {
+            setLawyer(updated);
+            setMyLawyerProfile(updated);
+          }}
+        />
       )}
 
       {/* Price Request Modal */}

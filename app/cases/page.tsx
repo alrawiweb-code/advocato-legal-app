@@ -138,7 +138,11 @@ export default function CasesPage() {
             >
               <Lock className="w-4 h-4" />
               <span>
-                {verificationStatus === "PENDING" || verificationStatus === "SUBMITTED"
+                {verificationStatus === "PENDING" ||
+                verificationStatus === "SUBMITTED" ||
+                verificationStatus === "UNDER_REVIEW" ||
+                verificationStatus === "DOCUMENTS_REQUIRED" ||
+                verificationStatus === "REJECTED"
                   ? "View Verification Status"
                   : "Apply for Verification / Onboarding"}
               </span>

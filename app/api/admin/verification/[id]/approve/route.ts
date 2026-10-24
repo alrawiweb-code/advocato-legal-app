@@ -24,13 +24,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Application not found" }, { status: 404 });
   }
 
+  // Decoupled from pricing: assignedRate is optional during verification.
+  // Newly verified lawyers retain hourly_rate = NULL until an admin assigns a fee.
   const body = await request.json().catch(() => ({}));
-  const assignedRate = parseInt(body.assignedRate, 10);
-  if (isNaN(assignedRate) || assignedRate <= 0) {
-    return NextResponse.json({ error: "A valid assignedRate is required" }, { status: 400 });
-  }
+  const rawRate = body.assignedRate ? parseInt(body.assignedRate, 10) : undefined;
+  const validRate = (typeof rawRate === "number" && !isNaN(rawRate) && rawRate > 0) ? rawRate : undefined;
 
-  const result = await approveLawyerApplication(application.id, application.lawyer_id, user.id, assignedRate);
+  const result = await approveLawyerApplication(application.id, application.lawyer_id, user.id, validRate);
 
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 500 });

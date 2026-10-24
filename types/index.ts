@@ -208,20 +208,53 @@ export interface ConsultationMessage {
   reactions?: string[];
 }
 
+export type ConsultationStatus =
+  | "pending"
+  | "confirmed"
+  | "declined"
+  | "in_progress"
+  | "completed"
+  | "missed"
+  | "cancelled"
+  | "active"
+  | "scheduled"
+  | "review"
+  | "closed";
+
+export type RescheduleStatus =
+  | "none"
+  | "pending_client"
+  | "pending_lawyer"
+  | "accepted"
+  | "rejected"
+  | "expired";
+
 export interface Consultation {
   id: string;
+  clientId?: string;
+  lawyerId?: string;
   lawyer: Lawyer;
-  status: "active" | "scheduled" | "review";
+  status: ConsultationStatus;
   caseTitle: string;
   matterNumber: string;
+  category?: string;
   clientName: string;
   lastActive: string;
   messages: ConsultationMessage[];
   opposingParty?: string;
   appointmentDate?: string;
+  durationMinutes?: number;
   consultationType?: "video" | "phone";
   paymentStatus?: "pre_authorized" | "held_in_escrow" | "completed";
   conflictStatus?: "pending" | "cleared" | "flagged";
+  clientJoinedAt?: string | null;
+  lawyerJoinedAt?: string | null;
+  declineReason?: string | null;
+  proposedRescheduleDate?: string | null;
+  rescheduleRequestedBy?: string | null;
+  rescheduleStatus?: RescheduleStatus;
+  rescheduleReason?: string | null;
+  originalAppointmentDate?: string | null;
   documents?: DocumentAttachment[];
   intakeBrief?: string;
   jurisdiction?: string;

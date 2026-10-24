@@ -15,6 +15,10 @@ import {
   AlertCircle,
   FileText,
   Phone,
+  Clock,
+  Lock,
+  ArrowLeft,
+  Calendar,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useUserRole } from "@/lib/context/RoleContext";
@@ -35,6 +39,16 @@ export function VideoConsultationRoom({
   audioOnly = false,
 }: VideoConsultationRoomProps) {
   const { currentUserId, role } = useUserRole();
+
+  // Join Authorization & Gate State
+  const [joinStatus, setJoinStatus] = useState<"checking" | "authorized" | "denied">("checking");
+  const [joinErrorCode, setJoinErrorCode] = useState<string | null>(null);
+  const [joinErrorMessage, setJoinErrorMessage] = useState<string | null>(null);
+  const [windowStart, setWindowStart] = useState<string | null>(null);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(0);
+  const [targetCounterpartId, setTargetCounterpartId] = useState<string | null>(null);
+
+  // Call Controls & State
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(audioOnly);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -52,6 +66,91 @@ export function VideoConsultationRoom({
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
+  // Phase 5 ICE Candidate Queue to prevent InvalidStateError
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+  const hasOffered = useRef<boolean>(false);
+  const processedEventIds = useRef<Set<string>>(new Set());
+
+  // 1. Pre-flight Join Authorization Check
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function verifyJoinAuthorization() {
+      try {
+        const res = await fetch("/api/consultation/join-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matterId }),
+        });
+
+        const data = await res.json();
+        if (isCancelled) return;
+
+        if (!res.ok || !data.success) {
+          setJoinStatus("denied");
+          setJoinErrorCode(data.code || "UNKNOWN_ERROR");
+          setJoinErrorMessage(data.error || "Access to consultation room denied.");
+          if (data.window_start) {
+            setWindowStart(data.window_start);
+            const diff = Math.max(0, Math.floor((new Date(data.window_start).getTime() - Date.now()) / 1000));
+            setCountdownSeconds(diff);
+          }
+          return;
+        }
+
+        // Successfully authorized
+        setJoinStatus("authorized");
+        if (data.counterpartId) {
+          setTargetCounterpartId(data.counterpartId);
+        }
+      } catch (err: any) {
+        if (isCancelled) return;
+        setJoinStatus("denied");
+        setJoinErrorCode("INTERNAL_ERROR");
+        setJoinErrorMessage(err?.message || "Failed to connect to verification service.");
+      }
+    }
+
+    verifyJoinAuthorization();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [matterId]);
+
+  // Countdown timer for TOO_EARLY gate
+  useEffect(() => {
+    if (joinStatus !== "denied" || joinErrorCode !== "TOO_EARLY" || countdownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          // Re-verify when timer hits zero
+          setJoinStatus("checking");
+          fetch("/api/consultation/join-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ matterId }),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.success) {
+                setJoinStatus("authorized");
+                if (data.counterpartId) setTargetCounterpartId(data.counterpartId);
+              } else {
+                setJoinStatus("denied");
+                setJoinErrorMessage(data.error);
+              }
+            })
+            .catch(() => setJoinStatus("denied"));
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [joinStatus, joinErrorCode, countdownSeconds, matterId]);
+
   // Call duration timer when connected
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -61,16 +160,15 @@ export function VideoConsultationRoom({
     return () => clearInterval(timer);
   }, [connectionStatus, participantCount]);
 
+  // 2. WebRTC & Secure Signaling Connection (Triggered only when join is authorized)
   useEffect(() => {
+    if (joinStatus !== "authorized") return;
+
     let isMounted = true;
     const supabase = createClient();
-    // Use a different channel name for audio-only to avoid cross-modal interference
     const channelName = `consultation-${audioOnly ? "audio" : "video"}-${matterId}`;
-    const channel = supabase.channel(channelName);
+    const broadcastChannel = supabase.channel(channelName);
 
-    // ICE Servers: STUN + OpenRelay TURN (free, no credentials needed)
-    // OpenRelay is metered.ca's public free TURN service for early-stage apps.
-    // Upgrade to a credentialed metered.ca account (50GB free) when you grow.
     const rtcConfig: RTCConfiguration = {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -96,11 +194,57 @@ export function VideoConsultationRoom({
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnectionRef.current = pc;
 
+    // Helper: Drain queued ICE candidates once remote description is set
+    async function drainIceCandidates() {
+      while (iceCandidateQueue.current.length > 0) {
+        const candidate = iceCandidateQueue.current.shift();
+        if (candidate && pc.signalingState !== "closed") {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (e) {
+            console.warn("[webrtc] Error draining queued ICE candidate:", e);
+          }
+        }
+      }
+    }
+
+    // Helper: Send signaling event via consultation_signaling table & broadcast fallback
+    async function sendSignalingMessage(eventType: string, payload: any) {
+      const msgId = `${eventType}-${Date.now()}-${Math.random()}`;
+      processedEventIds.current.add(msgId);
+
+      // 1. Database-backed ephemeral signaling table with strict participant RLS (Option B)
+      if (targetCounterpartId) {
+        supabase
+          .from("consultation_signaling")
+          .insert({
+            matter_id: matterId,
+            sender_id: currentUserId,
+            recipient_id: targetCounterpartId,
+            event_type: eventType,
+            payload: { ...payload, msgId },
+          })
+          .then(({ error }) => {
+            if (error) console.warn("[signaling-db] Insert warning:", error.message);
+          });
+      }
+
+      // 2. Broadcast channel for low-latency delivery
+      try {
+        broadcastChannel.send({
+          type: "broadcast",
+          event: eventType,
+          payload: { ...payload, senderId: currentUserId, msgId },
+        });
+      } catch (e) {
+        // broadcast fallback
+      }
+    }
+
     // Remote track listener
     pc.ontrack = (event) => {
       if (event.streams[0]) {
         if (audioOnly) {
-          // For audio-only mode, play through a hidden <audio> element
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = event.streams[0];
           }
@@ -126,16 +270,105 @@ export function VideoConsultationRoom({
       }
     };
 
-    // Send ICE candidates via Supabase Realtime channel
+    // Send ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        channel.send({
-          type: "broadcast",
-          event: "ice-candidate",
-          payload: { candidate: event.candidate, senderId: currentUserId },
-        });
+        sendSignalingMessage("ice-candidate", { candidate: event.candidate });
       }
     };
+
+    // Core Signaling Dispatcher
+    async function handleSignalingEvent(eventType: string, payload: any) {
+      if (!payload || payload.senderId === currentUserId) return;
+      if (payload.msgId && processedEventIds.current.has(payload.msgId)) return;
+      if (payload.msgId) processedEventIds.current.add(payload.msgId);
+      if (pc.signalingState === "closed") return;
+
+      switch (eventType) {
+        case "peer-joined": {
+          if (isMounted) setParticipantCount(2);
+          // Lawyer sends peer-ready response to client
+          if (role === "lawyer") {
+            await sendSignalingMessage("peer-ready", { role: "lawyer" });
+          } else if (role === "client" && !hasOffered.current) {
+            // Client is the designated single-offerer
+            try {
+              hasOffered.current = true;
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              await sendSignalingMessage("sdp-offer", { offer });
+            } catch (e) {
+              console.error("[webrtc] Error creating SDP offer on peer-joined:", e);
+            }
+          }
+          break;
+        }
+
+        case "peer-ready": {
+          if (isMounted) setParticipantCount(2);
+          // If Client sees lawyer is ready and hasn't offered yet, initiate offer
+          if (role === "client" && !hasOffered.current) {
+            try {
+              hasOffered.current = true;
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              await sendSignalingMessage("sdp-offer", { offer });
+            } catch (e) {
+              console.error("[webrtc] Error creating SDP offer on peer-ready:", e);
+            }
+          }
+          break;
+        }
+
+        case "sdp-offer": {
+          if (role !== "lawyer") return; // Single-offerer rule: only lawyer answers
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+            await drainIceCandidates();
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await sendSignalingMessage("sdp-answer", { answer });
+            if (isMounted) setParticipantCount(2);
+          } catch (e) {
+            console.error("[webrtc] Failed to handle WebRTC SDP offer:", e);
+          }
+          break;
+        }
+
+        case "sdp-answer": {
+          if (role !== "client") return;
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+            await drainIceCandidates();
+            if (isMounted) setParticipantCount(2);
+          } catch (e) {
+            console.error("[webrtc] Failed to handle WebRTC SDP answer:", e);
+          }
+          break;
+        }
+
+        case "ice-candidate": {
+          if (payload.candidate) {
+            if (!pc.remoteDescription) {
+              // Remote description not yet ready; enqueue to prevent InvalidStateError
+              iceCandidateQueue.current.push(payload.candidate);
+            } else {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+              } catch (e) {
+                console.warn("[webrtc] Failed to add ICE candidate directly:", e);
+              }
+            }
+          }
+          break;
+        }
+
+        case "peer-left": {
+          if (isMounted) setParticipantCount(1);
+          break;
+        }
+      }
+    }
 
     // Initialize Local Media Stream
     async function startMedia() {
@@ -149,7 +382,6 @@ export function VideoConsultationRoom({
           : { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
         if (!isMounted) return;
 
         localStreamRef.current = stream;
@@ -164,23 +396,8 @@ export function VideoConsultationRoom({
 
         if (isMounted) setConnectionStatus("connected");
 
-        // Broadcast peer-joined so any existing peer in the room can initiate an offer
-        channel.send({
-          type: "broadcast",
-          event: "peer-joined",
-          payload: { senderId: currentUserId, role },
-        });
-
-        // Client always initiates the offer
-        if (role === "client") {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          channel.send({
-            type: "broadcast",
-            event: "sdp-offer",
-            payload: { offer, senderId: currentUserId },
-          });
-        }
+        // Broadcast presence
+        await sendSignalingMessage("peer-joined", { role });
       } catch (err: any) {
         console.warn("Camera/Mic access not granted or unavailable:", err.message);
         if (isMounted) {
@@ -194,75 +411,50 @@ export function VideoConsultationRoom({
       }
     }
 
-    // Realtime Signaling Listeners
-    channel
-      .on("broadcast", { event: "peer-joined" }, async ({ payload }) => {
-        if (payload?.senderId !== currentUserId && pc.signalingState !== "closed") {
-          if (isMounted) setParticipantCount(2);
-          if (role === "client") {
-            try {
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              channel.send({
-                type: "broadcast",
-                event: "sdp-offer",
-                payload: { offer, senderId: currentUserId },
-              });
-            } catch (e) {
-              console.error("Failed to initiate WebRTC offer on peer-joined:", e);
-            }
-          }
-        }
-      })
-      .on("broadcast", { event: "sdp-offer" }, async ({ payload }) => {
-        if (payload.senderId !== currentUserId && pc.signalingState !== "closed") {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            channel.send({
-              type: "broadcast",
-              event: "sdp-answer",
-              payload: { answer, senderId: currentUserId },
-            });
-            if (isMounted) setParticipantCount(2);
-          } catch (e) {
-            console.error("Failed to handle WebRTC SDP offer:", e);
-          }
-        }
-      })
-      .on("broadcast", { event: "sdp-answer" }, async ({ payload }) => {
-        if (payload.senderId !== currentUserId && pc.signalingState !== "closed") {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
-            if (isMounted) setParticipantCount(2);
-          } catch (e) {
-            console.error("Failed to handle WebRTC SDP answer:", e);
-          }
-        }
-      })
-      .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
-        if (payload.senderId !== currentUserId && pc.signalingState !== "closed") {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-          } catch (e) {
-            console.error("Failed to add ICE candidate:", e);
-          }
-        }
-      })
+    // 1. Subscribe to Broadcast channel
+    broadcastChannel
+      .on("broadcast", { event: "peer-joined" }, ({ payload }) => handleSignalingEvent("peer-joined", payload))
+      .on("broadcast", { event: "peer-ready" }, ({ payload }) => handleSignalingEvent("peer-ready", payload))
+      .on("broadcast", { event: "sdp-offer" }, ({ payload }) => handleSignalingEvent("sdp-offer", payload))
+      .on("broadcast", { event: "sdp-answer" }, ({ payload }) => handleSignalingEvent("sdp-answer", payload))
+      .on("broadcast", { event: "ice-candidate" }, ({ payload }) => handleSignalingEvent("ice-candidate", payload))
+      .on("broadcast", { event: "peer-left" }, ({ payload }) => handleSignalingEvent("peer-left", payload))
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           startMedia();
         }
       });
 
+    // 2. Subscribe to Postgres Changes on consultation_signaling (Zero-Trust Option B)
+    const dbSignalingChannel = supabase
+      .channel(`db-signaling-${matterId}-${currentUserId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "consultation_signaling",
+          filter: `recipient_id=eq.${currentUserId}`,
+        },
+        (change) => {
+          const row = change.new as any;
+          if (row.matter_id === matterId && row.sender_id !== currentUserId) {
+            handleSignalingEvent(row.event_type, row.payload);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
+      sendSignalingMessage("peer-left", {});
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       pc.close();
-      supabase.removeChannel(channel);
+      iceCandidateQueue.current = [];
+      supabase.removeChannel(broadcastChannel);
+      supabase.removeChannel(dbSignalingChannel);
     };
-  }, [matterId, currentUserId, role, audioOnly]);
+  }, [joinStatus, matterId, currentUserId, role, audioOnly, targetCounterpartId]);
 
   // Audio mute toggle
   const toggleAudio = () => {
@@ -284,7 +476,7 @@ export function VideoConsultationRoom({
     }
   };
 
-  // Screen share toggle for legal contract redlines
+  // Screen share toggle
   const toggleScreenShare = async () => {
     if (!isScreenSharing) {
       try {
@@ -349,6 +541,83 @@ export function VideoConsultationRoom({
   const formatDuration = (secs: number) =>
     `${Math.floor(secs / 60).toString().padStart(2, "0")}:${(secs % 60).toString().padStart(2, "0")}`;
 
+  const formatCountdown = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${mins.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // ─── GATE VIEW 1: Checking Authorization ──────────────────────────────
+  if (joinStatus === "checking") {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#070D1E]/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="bg-[#0B132B] border border-hairline/30 rounded-2xl p-8 max-w-sm w-full text-center flex flex-col items-center gap-4 text-white shadow-2xl">
+          <div className="w-12 h-12 rounded-full border-2 border-brass border-t-transparent animate-spin" />
+          <div>
+            <h3 className="font-headline font-semibold text-base">Verifying Session Security</h3>
+            <p className="text-xs text-white/60 mt-1">Connecting to Advocato privileged consultation server...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── GATE VIEW 2: Access Denied / Window Restricted ───────────────────
+  if (joinStatus === "denied") {
+    const isTooEarly = joinErrorCode === "TOO_EARLY";
+    const isWindowClosed = joinErrorCode === "WINDOW_CLOSED";
+    const isReschedulePending = joinErrorCode === "RESCHEDULE_PENDING";
+
+    return (
+      <div className="fixed inset-0 z-50 bg-[#070D1E]/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="bg-[#0B132B] border border-hairline/30 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center flex flex-col items-center gap-5 text-white shadow-editorial">
+          <div className={`w-14 h-14 rounded-full flex items-center justify-center ${
+            isTooEarly ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"
+          }`}>
+            {isTooEarly ? <Clock className="w-7 h-7" /> : isWindowClosed ? <Lock className="w-7 h-7" /> : <AlertCircle className="w-7 h-7" />}
+          </div>
+
+          <div>
+            <h3 className="font-headline font-semibold text-lg">
+              {isTooEarly
+                ? "Meeting Window Not Yet Open"
+                : isWindowClosed
+                ? "Consultation Window Closed"
+                : isReschedulePending
+                ? "Reschedule Pending Confirmation"
+                : "Consultation Access Restricted"}
+            </h3>
+            <p className="text-xs text-white/70 mt-2 max-w-sm leading-relaxed">
+              {joinErrorMessage}
+            </p>
+          </div>
+
+          {isTooEarly && countdownSeconds > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-5 py-3 w-full">
+              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Opens In</span>
+              <span className="text-3xl font-mono font-bold text-amber-300 mt-1 block">
+                {formatCountdown(countdownSeconds)}
+              </span>
+              <span className="text-[10px] text-white/50 mt-1 block">
+                Meeting opens 5 minutes before scheduled appointment time.
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 w-full pt-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-surface-container border border-hairline text-xs font-semibold hover:bg-surface-container-high transition-colors text-white flex items-center justify-center gap-2"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to Messages</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── AUDIO-ONLY (Phone Call) UI ───────────────────────────────────────
   if (audioOnly) {
     return (
@@ -356,7 +625,6 @@ export function VideoConsultationRoom({
         ref={containerRef}
         className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
       >
-        {/* Hidden audio element for remote stream playback */}
         <audio ref={remoteAudioRef} autoPlay playsInline />
 
         <div className="bg-surface rounded-t-2xl sm:rounded-2xl border-t sm:border border-hairline shadow-editorial w-full max-w-md flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
@@ -408,7 +676,7 @@ export function VideoConsultationRoom({
                 <span className="text-xs font-bold text-emerald-800 block uppercase tracking-wider">Call Connected</span>
                 <span className="text-2xl font-mono font-bold text-emerald-900 mt-1 block">{formatDuration(callDuration)}</span>
                 <div className="flex items-center justify-center gap-1 mt-2">
-                  {[1,2,3,4,5].map((_, i) => (
+                  {[1, 2, 3, 4, 5].map((_, i) => (
                     <span key={i} className="w-1 bg-emerald-500 rounded-full animate-pulse" style={{ height: `${8 + (i % 3) * 6}px`, animationDelay: `${i * 100}ms` }} />
                   ))}
                 </div>
@@ -424,7 +692,7 @@ export function VideoConsultationRoom({
                   <span className="w-2 h-2 rounded-full bg-brass animate-ping" />
                   <span>Waiting for {counterpartName} to connect...</span>
                 </div>
-                <p className="text-[11px] text-on-surface-variant mt-1.5">Share the meeting link or have them open Messages to join.</p>
+                <p className="text-[11px] text-on-surface-variant mt-1.5">Counsel will appear once they enter the consultation.</p>
               </div>
             )}
 

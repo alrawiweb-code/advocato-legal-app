@@ -24,6 +24,15 @@ export interface MatterRecord {
   updated_at: string;
   appointment_date?: string | null;
   consultation_type?: string | null;
+  duration_minutes?: number;
+  client_joined_at?: string | null;
+  lawyer_joined_at?: string | null;
+  decline_reason?: string | null;
+  proposed_reschedule_date?: string | null;
+  reschedule_requested_by?: string | null;
+  reschedule_status?: "none" | "pending_client" | "pending_lawyer" | "accepted" | "rejected" | "expired";
+  reschedule_reason?: string | null;
+  original_appointment_date?: string | null;
   client?: {
     id: string;
     full_name: string;
@@ -35,6 +44,28 @@ export interface MatterRecord {
     full_name: string;
     email: string;
     avatar_url?: string;
+    lawyer_profiles?: {
+      hourly_rate?: number | null;
+      years_experience?: number;
+      bio?: string;
+      title?: string;
+      rating?: number;
+      review_count?: number;
+    } | {
+      hourly_rate?: number | null;
+      years_experience?: number;
+      bio?: string;
+      title?: string;
+      rating?: number;
+      review_count?: number;
+    }[];
+  };
+  intake_assessments?: {
+    summary?: string;
+    extracted_key_points?: any;
+  }[] | {
+    summary?: string;
+    extracted_key_points?: any;
   };
 }
 
@@ -47,21 +78,25 @@ export async function createOrGetMatter(options: CreateMatterOptions): Promise<{
   }
 
   try {
-    // Check if an active matter already exists between this client and lawyer
-    const { data: existing, error: searchError } = await supabase
-      .from("matters")
-      .select(`
-        *,
-        client:profiles!matters_client_id_fkey(id, full_name, email, avatar_url),
-        lawyer:profiles!matters_lawyer_id_fkey(id, full_name, email, avatar_url)
-      `)
-      .eq("client_id", user.id)
-      .eq("lawyer_id", options.lawyerId)
-      .order("created_at", { ascending: false })
-      .limit(1);
+    // If NO appointmentDate is requested (e.g. general discussion or case inquiry),
+    // check if an active (non-terminal) matter already exists between this client and lawyer
+    if (!options.appointmentDate) {
+      const { data: existing, error: searchError } = await supabase
+        .from("matters")
+        .select(`
+          *,
+          client:profiles!matters_client_id_fkey(id, full_name, email, avatar_url),
+          lawyer:profiles!matters_lawyer_id_fkey(id, full_name, email, avatar_url)
+        `)
+        .eq("client_id", user.id)
+        .eq("lawyer_id", options.lawyerId)
+        .not("status", "in", '("completed","cancelled","missed","declined","closed")')
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-    if (!searchError && existing && existing.length > 0) {
-      return { matter: existing[0] as MatterRecord };
+      if (!searchError && existing && existing.length > 0) {
+        return { matter: existing[0] as MatterRecord };
+      }
     }
 
     // Verify lawyer eligibility before creating a new consultation
@@ -102,8 +137,10 @@ export async function createOrGetMatter(options: CreateMatterOptions): Promise<{
         category: category,
         jurisdiction: jurisdiction,
         urgency: urgency,
-        status: options.appointmentDate ? "scheduled" : "active",
+        status: options.appointmentDate ? "pending" : "active",
         appointment_date: options.appointmentDate || null,
+        duration_minutes: 45,
+        reschedule_status: "none",
         consultation_type: options.consultationType || "video",
       })
       .select(`
@@ -115,6 +152,25 @@ export async function createOrGetMatter(options: CreateMatterOptions): Promise<{
 
     if (insertError) {
       return { matter: null, error: insertError.message };
+    }
+
+    // Insert initial request/system message if booking an appointment
+    if (options.appointmentDate && created) {
+      try {
+        const formattedDate = new Date(options.appointmentDate).toLocaleString("en-US", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+        const typeLabel = options.consultationType === "phone" ? "Phone" : "Video";
+        await supabase.from("messages").insert({
+          matter_id: created.id,
+          sender_id: user.id,
+          sender_role: "client",
+          text: `Consultation requested for ${formattedDate} via ${typeLabel}. Status: Pending Advocate Confirmation.`,
+        });
+      } catch (msgErr) {
+        console.warn("Could not insert initial booking message:", msgErr);
+      }
     }
 
     return { matter: created as MatterRecord };
@@ -186,7 +242,11 @@ export async function getUserMatters(): Promise<{ matters: MatterRecord[]; error
       .select(`
         *,
         client:profiles!matters_client_id_fkey(id, full_name, email, avatar_url),
-        lawyer:profiles!matters_lawyer_id_fkey(id, full_name, email, avatar_url)
+        lawyer:profiles!matters_lawyer_id_fkey(
+          id, full_name, email, avatar_url,
+          lawyer_profiles(hourly_rate, years_experience, bio, title, rating, review_count)
+        ),
+        intake_assessments(summary, extracted_key_points)
       `)
       .or(`client_id.eq.${user.id},lawyer_id.eq.${user.id}`)
       .order("updated_at", { ascending: false });

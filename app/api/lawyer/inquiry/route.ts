@@ -10,6 +10,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Strict role check: caller must be a genuine lawyer in profiles table (fail-closed)
+  const { data: callerProfile, error: profileRoleErr } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profileRoleErr || !callerProfile || callerProfile.role !== "lawyer") {
+    return NextResponse.json(
+      { error: "Forbidden: Only lawyers can open inquiries." },
+      { status: 403 }
+    );
+  }
+
   // Verify the caller is a lawyer with SUSPENDED or REJECTED status
   const { data: lp } = await supabase
     .from("lawyer_profiles")
