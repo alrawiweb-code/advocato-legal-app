@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { Lawyer, VerificationStatus } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 
@@ -78,105 +78,121 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [activeLawyerId, setActiveLawyerIdState] = useState<string | null>(null);
   const [myLawyerProfile, setMyLawyerProfileState] = useState<Lawyer | null>(null);
 
+  const inFlightHydrationRef = useRef<Promise<UserRole | null> | null>(null);
+  const lastHydratedUserIdRef = useRef<string | null>(null);
+
   const supabase = createClient();
   const isSupabaseConnected = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 
   const hydrateUserProfile = useCallback(async (userId: string, email: string, userMeta?: any): Promise<UserRole | null> => {
-    try {
-      // 1. Fetch public profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
+    // If a hydration for the same user is already in flight, reuse the promise to eliminate duplicate queries
+    if (inFlightHydrationRef.current && lastHydratedUserIdRef.current === userId) {
+      return inFlightHydrationRef.current;
+    }
 
-      const userRole: UserRole =
-        email.toLowerCase() === "alrawiweb@gmail.com"
-          ? "admin"
-          : (profile?.role as UserRole) ||
-            (userMeta?.role as UserRole) ||
-            "client";
-
-      const fullName =
-        profile?.full_name ||
-        userMeta?.full_name ||
-        email.split("@")[0] ||
-        "User";
-
-      let lawyerDetails: any = null;
-      let isLawyerVerified = false;
-      let lawyerVerificationStatus: VerificationStatus = "NOT_VERIFIED";
-
-      if (userRole === "lawyer") {
-        const { data: lp } = await supabase
-          .from("lawyer_profiles")
+    lastHydratedUserIdRef.current = userId;
+    const task = (async (): Promise<UserRole | null> => {
+      try {
+        // 1. Fetch public profile
+        const { data: profile } = await supabase
+          .from("profiles")
           .select("*")
           .eq("id", userId)
           .single();
-        lawyerDetails = lp;
 
-        if (lp) {
-          isLawyerVerified = Boolean(lp.is_verified);
-          lawyerVerificationStatus = (lp.verification_status as VerificationStatus) || (isLawyerVerified ? "VERIFIED" : "NOT_VERIFIED");
+        const userRole: UserRole =
+          email.toLowerCase() === "alrawiweb@gmail.com"
+            ? "admin"
+            : (profile?.role as UserRole) ||
+              (userMeta?.role as UserRole) ||
+              "client";
 
-          const lawyerModel: Lawyer = {
-            id: userId,
-            name: fullName,
-            title: lp.title || "Advocate",
-            headline: lp.headline || `${lp.practice_areas?.[0] || "General"} Specialist`,
-            yearsExperience: lp.years_experience || 5,
-            hourlyRate: lp.hourly_rate,
-            isVerified: isLawyerVerified,
-            verificationStatus: lawyerVerificationStatus,
-            availability: (lp.availability as any) || "Available today",
-            jurisdiction: lp.jurisdiction || lp.state_bar || "Delhi (DL)",
-            state: lp.state || lp.state_bar || lp.jurisdiction || "Delhi (DL)",
-            city: lp.city || undefined,
-            languages: lp.languages || ["English", "Hindi"],
-            practiceAreas: lp.practice_areas || ["General Legal Counsel"],
-            tags: lp.tags || [],
-            avatar: profile?.avatar_url || getInitialsAvatar(fullName),
-            bio: lp.bio || "",
-            notableCases: lp.notable_cases || [],
-            rating: Number(lp.rating) || 5.0,
-            reviewCount: lp.review_count || 0,
-            // Suspension fields
-            ...(lp.suspension_reason ? { suspensionReason: lp.suspension_reason } : {}),
-            ...(lp.suspended_at ? { suspendedAt: lp.suspended_at } : {}),
-          };
-          setMyLawyerProfileState(lawyerModel);
-          setActiveLawyerIdState(userId);
-        } else {
-          // Do not auto-create a fallback model. The user must complete their profile/verification.
-          setMyLawyerProfileState(null);
-          setActiveLawyerIdState(userId);
+        const fullName =
+          profile?.full_name ||
+          userMeta?.full_name ||
+          email.split("@")[0] ||
+          "User";
+
+        let lawyerDetails: any = null;
+        let isLawyerVerified = false;
+        let lawyerVerificationStatus: VerificationStatus = "NOT_VERIFIED";
+
+        if (userRole === "lawyer") {
+          const { data: lp } = await supabase
+            .from("lawyer_profiles")
+            .select("*")
+            .eq("id", userId)
+            .single();
+          lawyerDetails = lp;
+
+          if (lp) {
+            isLawyerVerified = Boolean(lp.is_verified);
+            lawyerVerificationStatus = (lp.verification_status as VerificationStatus) || (isLawyerVerified ? "VERIFIED" : "NOT_VERIFIED");
+
+            const lawyerModel: Lawyer = {
+              id: userId,
+              name: fullName,
+              title: lp.title || "Advocate",
+              headline: lp.headline || `${lp.practice_areas?.[0] || "General"} Specialist`,
+              yearsExperience: lp.years_experience || 5,
+              hourlyRate: lp.hourly_rate,
+              isVerified: isLawyerVerified,
+              verificationStatus: lawyerVerificationStatus,
+              availability: (lp.availability as any) || "Available today",
+              jurisdiction: lp.jurisdiction || lp.state_bar || "Delhi (DL)",
+              state: lp.state || lp.state_bar || lp.jurisdiction || "Delhi (DL)",
+              city: lp.city || undefined,
+              languages: lp.languages || ["English", "Hindi"],
+              practiceAreas: lp.practice_areas || ["General Legal Counsel"],
+              tags: lp.tags || [],
+              avatar: profile?.avatar_url || getInitialsAvatar(fullName),
+              bio: lp.bio || "",
+              notableCases: lp.notable_cases || [],
+              rating: Number(lp.rating) || 5.0,
+              reviewCount: lp.review_count || 0,
+              // Suspension fields
+              ...(lp.suspension_reason ? { suspensionReason: lp.suspension_reason } : {}),
+              ...(lp.suspended_at ? { suspendedAt: lp.suspended_at } : {}),
+            };
+            setMyLawyerProfileState(lawyerModel);
+            setActiveLawyerIdState(userId);
+          } else {
+            // Do not auto-create a fallback model. The user must complete their profile/verification.
+            setMyLawyerProfileState(null);
+            setActiveLawyerIdState(userId);
+          }
         }
-      }
 
-      const persona: UserPersona = {
-        id: userId,
-        name: fullName,
-        email: email,
-        role: userRole,
-        avatar: profile?.avatar_url || getInitialsAvatar(fullName),
-        lawyerId: userRole === "lawyer" ? userId : undefined,
-        barNumber: lawyerDetails?.bar_number || userMeta?.bar_number,
-        jurisdiction: lawyerDetails?.jurisdiction || userMeta?.jurisdiction,
-        isVerified: userRole === "lawyer" ? isLawyerVerified : true,
-        verificationStatus: userRole === "lawyer" ? lawyerVerificationStatus : "VERIFIED",
-      };
+        const persona: UserPersona = {
+          id: userId,
+          name: fullName,
+          email: email,
+          role: userRole,
+          avatar: profile?.avatar_url || getInitialsAvatar(fullName),
+          lawyerId: userRole === "lawyer" ? userId : undefined,
+          barNumber: lawyerDetails?.bar_number || userMeta?.bar_number,
+          jurisdiction: lawyerDetails?.jurisdiction || userMeta?.jurisdiction,
+          isVerified: userRole === "lawyer" ? isLawyerVerified : true,
+          verificationStatus: userRole === "lawyer" ? lawyerVerificationStatus : "VERIFIED",
+        };
 
-      setSessionUser(persona);
-      if (persona.lawyerId) {
-        setActiveLawyerIdState(persona.lawyerId);
+        setSessionUser(persona);
+        if (persona.lawyerId) {
+          setActiveLawyerIdState(persona.lawyerId);
+        }
+        return userRole;
+      } catch (err) {
+        console.error("Error hydrating profile from Supabase:", err);
+        return null;
+      } finally {
+        inFlightHydrationRef.current = null;
       }
-      return userRole;
-    } catch (err) {
-      console.error("Error hydrating profile from Supabase:", err);
-      return null;
-    }
+    })();
+
+    inFlightHydrationRef.current = task;
+    return task;
   }, [supabase]);
 
   const refreshUser = useCallback(async () => {

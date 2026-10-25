@@ -54,6 +54,67 @@ import { VideoConsultationRoom } from "@/components/consultation/VideoConsultati
 
 const EMOJI_LIST = ["👍", "🤝", "⚖️", "📄", "✅", "🙏", "👏", "💡"];
 
+// Isolated countdown button: keeps 1-second timer localized without re-rendering parent MessagesView
+function ConsultationJoinButton({
+  activeConsultation,
+  isCheckingJoin,
+  onJoin,
+}: {
+  activeConsultation: Consultation;
+  isCheckingJoin: boolean;
+  onJoin: () => void;
+}) {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    if (!activeConsultation.appointmentDate) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [activeConsultation.appointmentDate]);
+
+  const apptTime = new Date(activeConsultation.appointmentDate || 0).getTime();
+  const durationMs = (activeConsultation.durationMinutes || 45) * 60 * 1000;
+  const windowStart = apptTime - 5 * 60 * 1000; // T - 5m
+  const windowEnd = apptTime + durationMs + 15 * 60 * 1000; // T + duration + 15m
+
+  if (now < windowStart) {
+    const diffSec = Math.max(0, Math.floor((windowStart - now) / 1000));
+    const mins = Math.floor(diffSec / 60);
+    const secs = diffSec % 60;
+    const timeStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return (
+      <button
+        disabled
+        title={`Room opens at ${new Date(windowStart).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (5m early entry buffer)`}
+        className="px-2.5 py-1 rounded bg-surface-container border border-hairline text-on-surface-variant text-[11px] font-semibold opacity-70 cursor-not-allowed flex items-center gap-1.5"
+      >
+        <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+        <span>Opens in {timeStr}</span>
+      </button>
+    );
+  }
+
+  if (now > windowEnd) {
+    return (
+      <span className="px-2.5 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-600 text-[11px] font-semibold flex items-center gap-1">
+        <Lock className="w-3 h-3" />
+        <span>Window Closed</span>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={onJoin}
+      disabled={isCheckingJoin}
+      className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-all shadow-xs flex items-center gap-1.5 animate-pulse disabled:opacity-50"
+    >
+      <span className="w-2 h-2 rounded-full bg-white" />
+      <span>{isCheckingJoin ? "Verifying..." : "Join Meeting"}</span>
+    </button>
+  );
+}
+
 function MessagesView() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -109,14 +170,8 @@ function MessagesView() {
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Phase 4: Join window live clock & verification state
-  const [liveNow, setLiveNow] = useState<Date>(new Date());
+  // Phase 4: Join window verification state
   const [isCheckingJoin, setIsCheckingJoin] = useState(false);
-
-  useEffect(() => {
-    const timer = setInterval(() => setLiveNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Phase 4: Helper to calculate join window state
   const getJoinWindowState = (consultation: Consultation | null | undefined) => {
@@ -135,7 +190,7 @@ function MessagesView() {
     const durationMs = (consultation.durationMinutes || 45) * 60 * 1000;
     const windowStart = apptTime - 5 * 60 * 1000; // T - 5m
     const windowEnd = apptTime + durationMs + 15 * 60 * 1000; // T + duration + 15m
-    const now = liveNow.getTime();
+    const now = Date.now();
 
     if (now < windowStart) {
       const diffSec = Math.max(0, Math.floor((windowStart - now) / 1000));
@@ -161,21 +216,25 @@ function MessagesView() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Lazy-load lawyer directory only when "New Consultation" modal is opened
+  useEffect(() => {
+    if (!showNewConsultationModal || allLawyersList.length > 0) return;
+    fetch("/api/lawyers")
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data && Array.isArray(data.lawyers)) setAllLawyersList(data.lawyers);
+      })
+      .catch((err) => console.error("Failed to fetch lawyers for messaging modal:", err));
+  }, [showNewConsultationModal, allLawyersList.length]);
+
   // 1. Initialize consultations: load from Supabase matters, fallback to storage
   useEffect(() => {
     async function initConsultations() {
-      fetch("/api/lawyers")
-        .then(async (res) => {
-          if (!res.ok) {
-            throw new Error(`Server returned HTTP ${res.status}`);
-          }
-          return res.json();
-        })
-        .then((data) => {
-          if (data && Array.isArray(data.lawyers)) setAllLawyersList(data.lawyers);
-        })
-        .catch((err) => console.error("Failed to fetch lawyers for messaging:", err));
-
       let activeList: Consultation[] = [];
 
       try {
@@ -1510,42 +1569,11 @@ function MessagesView() {
                     >
                       Reschedule
                     </button>
-                    {(() => {
-                      const windowInfo = getJoinWindowState(activeConsultation);
-                      if (windowInfo.state === "too_early") {
-                        const mins = Math.floor(windowInfo.diffSec / 60);
-                        const secs = windowInfo.diffSec % 60;
-                        const timeStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-                        return (
-                          <button
-                            disabled
-                            title={`Room opens at ${windowInfo.windowStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (5m early entry buffer)`}
-                            className="px-2.5 py-1 rounded bg-surface-container border border-hairline text-on-surface-variant text-[11px] font-semibold opacity-70 cursor-not-allowed flex items-center gap-1.5"
-                          >
-                            <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
-                            <span>Opens in {timeStr}</span>
-                          </button>
-                        );
-                      }
-                      if (windowInfo.state === "window_closed") {
-                        return (
-                          <span className="px-2.5 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-600 text-[11px] font-semibold flex items-center gap-1">
-                            <Lock className="w-3 h-3" />
-                            <span>Window Closed</span>
-                          </span>
-                        );
-                      }
-                      return (
-                        <button
-                          onClick={() => handleCallStart(activeConsultation.consultationType === "phone" ? "phone" : "video")}
-                          disabled={isCheckingJoin}
-                          className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-all shadow-xs flex items-center gap-1.5 animate-pulse disabled:opacity-50"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-white" />
-                          <span>{isCheckingJoin ? "Verifying..." : "Join Meeting"}</span>
-                        </button>
-                      );
-                    })()}
+                    <ConsultationJoinButton
+                      activeConsultation={activeConsultation}
+                      isCheckingJoin={isCheckingJoin}
+                      onJoin={() => handleCallStart(activeConsultation.consultationType === "phone" ? "phone" : "video")}
+                    />
                   </div>
                 </div>
               )}

@@ -1,16 +1,19 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-export function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+let clientInstance: ReturnType<typeof createClientInternal> | undefined;
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    // Return dummy client if keys aren't added yet, preventing SSR crashes
-    return createBrowserClient(
-      supabaseUrl || "https://placeholder-project.supabase.co",
-      supabaseAnonKey || "placeholder-anon-key"
-    );
-  }
-
+function createClientInternal() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
   return createBrowserClient(supabaseUrl, supabaseAnonKey);
+}
+
+export function createClient() {
+  if (typeof window !== "undefined") {
+    if (!clientInstance) {
+      clientInstance = createClientInternal();
+    }
+    return clientInstance;
+  }
+  return createClientInternal();
 }

@@ -7,9 +7,6 @@ export async function GET() {
   try {
     const supabase = await createClient();
 
-    // Public read endpoint: guests and authenticated clients can browse taxonomy
-    const { data: { user } } = await supabase.auth.getUser();
-
     // 2. Fetch Practice Areas Taxonomy from Supabase
     const { data: categories, error: catError } = await supabase
       .from("practice_area_categories")
@@ -42,7 +39,11 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json(practiceAreas);
+    return NextResponse.json(practiceAreas, {
+      headers: {
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      },
+    });
 
   } catch (error: any) {
     console.error("Error in GET /api/practice-areas:", error);
