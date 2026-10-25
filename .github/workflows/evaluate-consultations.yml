@@ -1,0 +1,16 @@
+name: Evaluate Consultations Cron
+
+on:
+  schedule:
+    # Triggers every 15 minutes to evaluate consultation outcomes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    name: Evaluate Outcomes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Consultation Evaluator
+        run: |
+          curl -f -s -X POST https://advocato-legal-app.vercel.app/api/cron/evaluate-consultations || true
