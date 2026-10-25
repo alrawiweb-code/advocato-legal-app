@@ -34,7 +34,7 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Protected routes that require real authenticated session
-  const protectedPrefixes = ["/cases", "/messages", "/profile", "/admin", "/lawyer/verify"];
+  const protectedPrefixes = ["/cases", "/messages", "/profile", "/admin", "/lawyer/verify", "/client/onboarding"];
   const isProtected = protectedPrefixes.some((prefix) =>
     request.nextUrl.pathname.startsWith(prefix)
   );

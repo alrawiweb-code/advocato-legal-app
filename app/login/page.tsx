@@ -18,6 +18,8 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { CaptchaWidget } from "@/components/ui/CaptchaWidget";
 import { LawyerRegistrationWizard } from "@/components/auth/LawyerRegistrationWizard";
 import { INDIAN_STATES } from "@/lib/data/lawyers";
+import { GoogleIcon } from "@/components/ui/GoogleIcon";
+import { createClient } from "@/lib/supabase/client";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -53,6 +55,20 @@ function LoginFormContent() {
     if (searchParams.get("reset") === "success") {
       setSuccessMessage("Your password has been reset successfully. Please sign in with your new credentials.");
     }
+
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "client" || tabParam === "lawyer") {
+      setSelectedRoleTab(tabParam);
+    }
+
+    const errorParam = searchParams.get("error");
+    if (errorParam === "already_client") {
+      setErrorMessage("This email address is already registered to a Client account. Please sign in through the Client portal.");
+    } else if (errorParam === "already_lawyer") {
+      setErrorMessage("This email address is registered as an Attorney Practice account. Please sign in through the Attorney portal.");
+    } else if (errorParam) {
+      setErrorMessage(decodeURIComponent(errorParam));
+    }
   }, [searchParams]);
 
   // CAPTCHA tokens
@@ -71,6 +87,36 @@ function LoginFormContent() {
   const [bio, setBio] = useState("");
 
   const [isRegistrationSuccess, setIsRegistrationSuccess] = useState(false);
+
+  const handleGoogleSignIn = async (role: "client" | "lawyer", mode: "signin" | "register") => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const supabase = createClient();
+      const defaultTarget = role === "lawyer" && mode === "register" ? "/lawyer/verify" : getSafeRedirectForRole(role);
+      const redirectTo = `${window.location.origin}/auth/callback?role=${role}&mode=${mode}&next=${encodeURIComponent(defaultTarget)}`;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+
+      if (error) {
+        setErrorMessage(error.message || "Failed to initiate Google authentication.");
+        setIsSubmitting(false);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "An unexpected error occurred during Google Sign-In.");
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -283,7 +329,27 @@ function LoginFormContent() {
 
           {/* Mode 1: Sign In (Client or Lawyer) */}
           {authMode === "signin" && (
-            <form onSubmit={handleSignIn} className="space-y-4">
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => handleGoogleSignIn(selectedRoleTab, "signin")}
+                disabled={isSubmitting}
+                className="w-full bg-surface-container-lowest hover:bg-surface-container-low text-primary font-semibold text-xs py-2.5 px-4 rounded-xl border border-hairline shadow-2xs transition-all flex items-center justify-center gap-2.5 min-h-[44px] active:scale-[0.99] disabled:opacity-50"
+              >
+                <GoogleIcon className="w-4 h-4" />
+                <span>
+                  {selectedRoleTab === "client" ? "Continue with Google" : "Continue with Google (Counsel)"}
+                </span>
+              </button>
+
+              <div className="relative flex items-center justify-center">
+                <div className="border-t border-hairline/80 w-full" />
+                <span className="bg-surface-container-lowest px-2.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant shrink-0">
+                  Or continue with email
+                </span>
+              </div>
+
+              <form onSubmit={handleSignIn} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-primary block">
                   Email Address
@@ -354,11 +420,30 @@ function LoginFormContent() {
                 </button>
               </div>
             </form>
+          </div>
           )}
 
           {/* Mode 2: Client Registration */}
           {authMode === "register" && selectedRoleTab === "client" && (
-            <form onSubmit={handleRegisterClient} className="space-y-4">
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => handleGoogleSignIn("client", "register")}
+                disabled={isSubmitting}
+                className="w-full bg-surface-container-lowest hover:bg-surface-container-low text-primary font-semibold text-xs py-2.5 px-4 rounded-xl border border-hairline shadow-2xs transition-all flex items-center justify-center gap-2.5 min-h-[44px] active:scale-[0.99] disabled:opacity-50"
+              >
+                <GoogleIcon className="w-4 h-4" />
+                <span>Sign up with Google</span>
+              </button>
+
+              <div className="relative flex items-center justify-center">
+                <div className="border-t border-hairline/80 w-full" />
+                <span className="bg-surface-container-lowest px-2.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant shrink-0">
+                  Or register with email
+                </span>
+              </div>
+
+              <form onSubmit={handleRegisterClient} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-primary block">
                   Full Name
@@ -428,6 +513,7 @@ function LoginFormContent() {
                 )}
               </button>
             </form>
+          </div>
           )}
 
           {/* Mode 2: Lawyer Registration */}

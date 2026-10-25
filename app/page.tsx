@@ -523,9 +523,14 @@ function ClientHomeView() {
 
   useEffect(() => {
     fetch("/api/lawyers")
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}`);
+        }
+        return res.json();
+      })
       .then((data) => {
-        if (data && data.lawyers) setLawyers(data.lawyers);
+        if (data && Array.isArray(data.lawyers)) setLawyers(data.lawyers);
       })
       .catch((err) => console.error("Failed to fetch lawyers:", err));
   }, []);

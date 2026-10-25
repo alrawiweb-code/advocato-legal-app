@@ -39,3 +39,7 @@ Thumbs.db
 # Supabase CLI temp files
 supabase/.temp/
 
+# OAuth Credentials
+*credentials*.json
+client_secret*.json
+

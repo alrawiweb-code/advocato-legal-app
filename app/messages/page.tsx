@@ -165,9 +165,14 @@ function MessagesView() {
   useEffect(() => {
     async function initConsultations() {
       fetch("/api/lawyers")
-        .then((res) => res.json())
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(`Server returned HTTP ${res.status}`);
+          }
+          return res.json();
+        })
         .then((data) => {
-          if (data && data.lawyers) setAllLawyersList(data.lawyers);
+          if (data && Array.isArray(data.lawyers)) setAllLawyersList(data.lawyers);
         })
         .catch((err) => console.error("Failed to fetch lawyers for messaging:", err));
 

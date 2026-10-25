@@ -294,8 +294,9 @@ export default function ProfilePage() {
               </div>
 
               <p className="text-[11px] text-on-surface-variant">
-                Change your account password. For security, you must provide your current password to authorize changes.
+                Change your account password. For security, you must provide your current password to authorize changes. If you signed in with Google, you do not need a password to access Advocato.
               </p>
+
 
               {passwordChangeError && (
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 animate-fadeIn">

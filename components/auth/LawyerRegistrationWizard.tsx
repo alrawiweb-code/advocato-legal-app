@@ -7,6 +7,8 @@ import { INDIAN_STATES } from "@/lib/data/lawyers";
 import { useUserRole } from "@/lib/context/RoleContext";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { CaptchaWidget } from "@/components/ui/CaptchaWidget";
+import { GoogleIcon } from "@/components/ui/GoogleIcon";
+import { createClient } from "@/lib/supabase/client";
 
 export function LawyerRegistrationWizard({ onCancel }: { onCancel?: () => void }) {
   const { registerLawyer } = useUserRole();
@@ -24,6 +26,32 @@ export function LawyerRegistrationWizard({ onCancel }: { onCancel?: () => void }
     bio: "",
     password: "",
   });
+
+  const handleGoogleLawyerSignUp = async () => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const supabase = createClient();
+      const redirectTo = `${window.location.origin}/auth/callback?role=lawyer&mode=register&next=${encodeURIComponent("/lawyer/verify")}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+      if (error) {
+        setErrorMessage(error.message || "Failed to initiate Google authentication.");
+        setIsSubmitting(false);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "An unexpected error occurred.");
+      setIsSubmitting(false);
+    }
+  };
 
   const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,6 +188,28 @@ export function LawyerRegistrationWizard({ onCancel }: { onCancel?: () => void }
         <form onSubmit={handleNext} className="space-y-4">
           {step === 1 && (
             <>
+              <div className="mb-4 pb-4 border-b border-hairline/80 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleLawyerSignUp}
+                  disabled={isSubmitting}
+                  className="w-full bg-surface-container-lowest hover:bg-surface-container-low text-primary font-semibold text-xs py-2.5 px-4 rounded-xl border border-hairline shadow-2xs transition-all flex items-center justify-center gap-2.5 min-h-[44px] active:scale-[0.99] disabled:opacity-50"
+                >
+                  <GoogleIcon className="w-4 h-4" />
+                  <span>Authenticate with Google to Start Practice Application</span>
+                </button>
+                <p className="text-[11px] text-center text-on-surface-variant">
+                  Authenticate your verified identity via Google, then provide your Bar enrollment details.
+                </p>
+              </div>
+
+              <div className="relative flex items-center justify-center mb-4">
+                <div className="border-t border-hairline/80 w-full" />
+                <span className="bg-surface-container-lowest px-2.5 text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant shrink-0">
+                  Or enter details manually
+                </span>
+              </div>
+
               <h2 className="font-headline text-xl font-semibold text-primary mb-1">Contact Details</h2>
               <p className="text-xs text-on-surface-variant mb-4">Provide your legal practice contact information.</p>
 

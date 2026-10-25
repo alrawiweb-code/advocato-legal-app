@@ -8,9 +8,6 @@ export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
-    // Public read endpoint: guests and authenticated clients can browse directory
-    const { data: { user } } = await supabase.auth.getUser();
-
     // 2. Parse Query Parameters
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
@@ -66,7 +63,11 @@ export async function GET(request: Request) {
           cleanSearch = cleanSearch.substring(4).trim();
         }
         
-        query = query.or(`name.ilike.%${cleanSearch}%,title.ilike.%${cleanSearch}%,headline.ilike.%${cleanSearch}%`);
+        // Remove PostgREST logic delimiters to avoid query parse errors
+        const sanitizedSearch = cleanSearch.replace(/[,()]/g, " ").trim();
+        if (sanitizedSearch) {
+          query = query.or(`name.ilike.%${sanitizedSearch}%,title.ilike.%${sanitizedSearch}%,headline.ilike.%${sanitizedSearch}%`);
+        }
       }
       
       // Apply sorting
@@ -93,8 +94,15 @@ export async function GET(request: Request) {
       const { data, count, error } = await query;
       
       if (error) {
-        console.error("Supabase query error:", error);
-        throw error;
+        console.error("Supabase query error in /api/lawyers:", error);
+        return NextResponse.json({
+          lawyers: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+          error: error.message || "Failed to query lawyers",
+        });
       }
 
       total = count || 0;
@@ -138,6 +146,13 @@ export async function GET(request: Request) {
 
   } catch (error: any) {
     console.error("Error in GET /api/lawyers:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({
+      lawyers: [],
+      total: 0,
+      page: 1,
+      limit: 12,
+      totalPages: 0,
+      error: error?.message || "Internal Server Error",
+    }, { status: 500 });
   }
 }
